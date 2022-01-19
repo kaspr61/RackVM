@@ -1,0 +1,4 @@
+__entry__:  
+        LDI     R0,     1024
+        LDI     R1,     6
+        ADD     R0,     R1,     R2
