@@ -8,24 +8,22 @@
 #define IsRegFree(r) (!R_used[r])
 #define IsOutOfRegs(r) (R_usedCount >= REGISTER_COUNT)
 
-/* Extracts K from instruction (last 18 bits). */
-#define GetIR_K() ((IR.raw & (0x3FFFF << 14)) >> 14) 
-
-/* Extracts R0 from instruction (bit 6-13). */
-#define GetIR_R0() ((IR.raw & (0xFF << 6)) >> 6) 
-
-/* Extracts R1 from instruction (bit 14-21). */
-#define GetIR_R1() ((IR.raw & (0xFF << 14)) >> 14)
-
-/* Extracts R2 from instruction (bit 22-29). */
-#define GetIR_R2() ((IR.raw & (0xFF << 22)) >> 22) 
-
 typedef int32_t  Word;
 typedef uint32_t Uword;
 typedef uint32_t Ptr;
 
 typedef union Instr {
-    uint8_t  opcode : 6;
+    struct {
+        uint8_t  opcode;
+        uint8_t  R0;
+        uint8_t  R1;
+        uint8_t  R2;
+    };
+    struct {
+        uint8_t  padding;
+        uint8_t  R;
+        uint16_t K;
+    };
     uint32_t raw;
 } Instr_t;
 
@@ -37,7 +35,7 @@ static Instr_t IR; /* Instruction register. */
 /*** INSTRUCTIONS ***/
 enum OpCode {
     OPCODE_MOV = 0x00,
-    OPCODE_LDK = 0x01,
+    OPCODE_LDI = 0x01,
     OPCODE_ADD = 0x02,
 
     OPCODE_COUNT
@@ -45,59 +43,54 @@ enum OpCode {
 
 static void instr_MOV(void)
 {
-    *(R+GetIR_R0()) = *(R+GetIR_R1());
+    *(R+IR.R0) = *(R+IR.R1);
 }
 
-static void instr_LDK(void)
+static void instr_LDI(void)
 {
-    *(R+GetIR_R0()) = GetIR_K();
+    *(R+IR.R) = IR.K;
 }
 
 static void instr_ADD(void)
 {
-    *(R+GetIR_R0()) = *(R+GetIR_R1()) + *(R+GetIR_R2());
+    *(R+IR.R0) = *(R+IR.R1) + *(R+IR.R2);
 }
 
 /* Declare an array of function pointers for instructions. */
 static void(*DoInstruction[OPCODE_COUNT])(void) = {
     instr_MOV,
-    instr_LDK,
+    instr_LDI,
     instr_ADD
     };
 
 /********************/
 
-#define SetR0(val) IR.raw |= (val << 6)
-#define SetR1(val) IR.raw |= (val << 14)
-#define SetR2(val) IR.raw |= (val << 22)
-#define SetK(val)  IR.raw |= (val << 14)
-
 int main(int argc, const char **argv)
 {
-    IR.raw = OPCODE_LDK;
-    SetR0(0x0);
-    SetK(1024);
+    IR.raw = OPCODE_LDI;
+    IR.R0 = 0x0;
+    IR.K = 1024;
 
     //printf("IR = 0x%08X\n", IR.raw);
 
-    printf("opcode = %d\nR0 = %d\nK = %d\n", IR.opcode, GetIR_R0(), GetIR_K());
+    printf("opcode = %d\nR0 = %d\nK = %d\n", IR.opcode, IR.R0, IR.K);
 
     DoInstruction[IR.opcode]();
     printf("\nR[0] = %d\n\n", R[0]);
 
-    IR.raw = OPCODE_LDK;
-    SetR0(0x1);
-    SetK(6);
-    printf("opcode = %d\nR0 = %d\nK = %d\n", IR.opcode, GetIR_R0(), GetIR_K());
+    IR.raw = OPCODE_LDI;
+    IR.R0 = 0x1;
+    IR.K = 6;
+    printf("opcode = %d\nR0 = %d\nK = %d\n", IR.opcode, IR.R0, IR.K);
 
     DoInstruction[IR.opcode]();
     printf("\nR[1] = %d\n\n", R[1]);
     
     IR.raw = OPCODE_ADD;
-    SetR0(0x0);
-    SetR1(0x0);
-    SetR2(0x1);
-    printf("opcode = %d\nR0 = %d\nR1 = %d\nR2 = %d\n", IR.opcode, GetIR_R0(), GetIR_R1(), GetIR_R2());
+    IR.R0 = 0x0;
+    IR.R1 = 0x0;
+    IR.R2 = 0x1;
+    printf("opcode = %d\nR0 = %d\nR1 = %d\nR2 = %d\n", IR.opcode, IR.R0, IR.R1, IR.R2);
 
     DoInstruction[IR.opcode]();
     printf("\nR[0] = %d\n\n", R[0]);  
