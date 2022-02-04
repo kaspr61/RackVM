@@ -2,6 +2,13 @@
 
 namespace Assembly
 {
+	LabelDictionary::LabelDictionary()
+	{
+		// Add 32 registers as labels.
+		for (int i = 0; i < 32; i++)
+			m_labels["R"+std::to_string(i)] = Label(i);
+	}
+
 	bool LabelDictionary::RegisterLabel(const std::string& label, Address value)
 	{
 		Label lbl;
@@ -29,9 +36,16 @@ namespace Assembly
 
 	void LabelDictionary::WarnAboutUnusedLabels() const
 	{
+		auto isRegister = [](const std::string& label) { 
+			if (label[0] == 'R' && label.length() > 1 && std::isdigit(label[1]))
+				return true;
+
+			return false;
+		};
+
 		for (auto elem : m_labels)
 		{
-			if (elem.second.refCount == 0)
+			if (elem.second.refCount == 0 && !isRegister(elem.first))
 			{
 				std::cout << "Warning: unused label \"" << elem.first << "\"." << std::endl;
 			}

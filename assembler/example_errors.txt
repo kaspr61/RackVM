@@ -1,25 +1,27 @@
-.MODE       Register    ; Instructs the VM use the register instruction set.
 .HEAP       4096        ; Start with 4 KiB heap size
 .HEAP_MAX   67 108 864  ; 64 MiB. Overflows will terminate the program at runtime.
 
 // Execution starts here.
       JMP     init                  // Start by jumping to init.
 
+.MODE       Register    ; Instructs the VM use the register instruction set.
 init:
-      NOP	                          ; Do nothing.
+      NOP	                        ; Do nothing.
       NOP
-      NOP	                          // Do nothing.
-      JMP	    main                  ; Jump to main.
+      NOP	                        // Do nothing.
+      JMP	    main                ; Jump to main.
 
-main:  // Entry point.
+main label:  // Entry point.
   ; It starts here.
-      LDI     R0,     8 + 2         // Addition
+      LDI     R0,     -8 + 2         // Addition
       LDI     R1,     8 - 2         // Subtraction
-      LDI     R2,     8 * 5         // Multiplication
+      LDI     R2,     8 * 5 + 4     // Multiplication
       LDI     R3,     8 / 2         // Division.
       LDI     R4,     8 / 10        ; One more division.
       LDI     R5,     1024          ; Load 1024 into R5.
-      LDI     R6,     -20           ; Load -20 into R6.
       LDI     R1,     6             // Load 6 into R1.
       ADD     R0,     R1,     R2
       SUB     R0,     R1,     R2    ; Subtract
+      123     R2
+      JMP     main
+      JMP     nonsense
