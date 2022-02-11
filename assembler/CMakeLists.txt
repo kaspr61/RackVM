@@ -7,6 +7,7 @@ target_sources(${TARGET_ASM}
     PRIVATE
         assembler.cpp   assembler.hpp
         label.cpp       label.hpp
+        encoder.cpp     encoder.hpp
         common.hpp
 )
 

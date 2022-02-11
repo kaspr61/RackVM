@@ -4,17 +4,26 @@
     std::cerr << "[Assembler]: Error at line " << m_lineNbr << ": " << msg \
     << std::endl; m_hasError = true; m_lastError = m_lineNbr;}
 #define InstructionError(msg) if (!(m_flags & FLAG_SUPPRESS_ALL_ERRORS)){\
-    std::cerr << "[Assembler]: Error at instruction " << m_instrNbr << ": " \
-    << msg << std::endl; m_hasError = true; m_lastError = m_instrNbr;}
+    std::cerr << "[Assembler]: Error at address " << "0x" << std::hex << m_instrAddr << ": " \
+    << msg << std::endl; m_hasError = true; m_lastError = m_instrAddr;}
 
 namespace Assembly {
 
     Assembler::Assembler() :
         m_hasError(false),
         m_lineNbr(0),
-        m_instrNbr(0),
+        m_instrAddr(0),
         m_flags(0x0)
     {
+    }
+
+    std::string Assembler::ToLowerCase(const std::string& str) const
+    {
+        std::string result = str;
+        std::transform(result.begin(), result.end(), result.begin(),
+            [](unsigned char ch) { return ::tolower(ch); });
+
+        return result;
     }
 
     std::string Assembler::RemoveWhitespace(const std::string& str) const
@@ -30,6 +39,29 @@ namespace Assembly {
         }
 
         return out;
+    }
+
+    BinaryInstruction Assembler::TranslateInstruction(const std::string& opcode, uint64_t* args) const
+    {
+        BinaryInstruction result;
+        result.instr12[0] = 0;
+        result.instr12[1] = 0;
+        result.instr12[2] = 0;
+
+        if (opcode.front() == '.')
+            return result;
+
+        return result;
+    }
+
+    size_t Assembler::GetInstructionSize(const std::string& opcode, uint64_t arg0) const
+    {
+        if (opcode == ".WORD") // Not actually an instruction. This allocates static program memory.
+        {
+            return static_cast<size_t>(arg0);
+        }
+
+        return 1; // 1 word = 4 bytes.
     }
 
     uint32_t Assembler::EvaluateArgument(const std::string& arg)
@@ -113,22 +145,21 @@ namespace Assembly {
         return result;
     }
 
-    void Assembler::ExecAssemblerDirective(const std::string& directive, std::string args[3])
+    void Assembler::ExecAssemblerDirective(const std::string& directive, const std::string* args)
     {
         // Make args[0] lower-case.
-        std::transform(args[0].begin(), args[0].end(), args[0].begin(),
-            [](unsigned char ch) { return ::tolower(ch); });
+        std::string lowerArg0 = ToLowerCase(args[0]);
 
         if (directive == ".MODE") // Sets header info field 'MODE'.
         {
-            if (m_instrNbr > 0)
+            if (m_instrAddr > 0)
             {
                 LineError("Invalid use of directive \".MODE\". The VM mode may only be declared "\
                     "before instructions.");
                 return;
             }
 
-            if (args[0] != "register" && args[0] != "stack")
+            if (lowerArg0 != "register" && lowerArg0 != "stack")
             {
                 LineError("Invalid argument for directive \".MODE\"");
                 return;
@@ -157,6 +188,29 @@ namespace Assembly {
             }
 
             m_binHeader.heap_max = std::stoul(args[0]);
+        }
+        else if (directive == ".WORD") // Declares number of words of program data to be stored.
+        {
+            bool isString = args[1].find('"') != std::string::npos;
+
+            if (args[0].find_first_not_of("0123456789") != std::string::npos)
+            {
+                LineError("Invalid size argument for directive \".WORD\". Must be an unsigned integer.");
+                return;
+            }
+            else if (args[1].find_first_not_of("\".f0123456789") != std::string::npos && !isString)
+            {
+                LineError("Invalid data argument for directive \".WORD\". Must be an unsigned integer, float, double, or string.");
+                return;
+            }
+            else if (args[1] == "")
+            {
+                LineError("No data defined for directive \".WORD\".");
+                return;
+            }
+
+            workingText << directive << ';' << args[0] << ';' << args[1] << ';' << std::endl;
+            m_instrAddr += std::stoul(args[0]);
         }
         else
         {
@@ -197,12 +251,13 @@ namespace Assembly {
             }
 
             // Try to register the label.
-            if (!m_labelDict.RegisterLabel(label, m_instrNbr))
+            if (!m_labelDict.RegisterLabel(label, m_instrAddr))
             {
                 LineError("Multiple label definitions: \"" << label << "\".");
+                return;
             }
 
-            return;
+            pos = line.find_first_not_of(whitespace, posDelim + 1);
         }
 
         std::string opcode = "";
@@ -212,10 +267,14 @@ namespace Assembly {
         posDelim = std::min(line.find_first_of(wsOrComment, pos), len); // Cap to string length if not found.
         opcode = line.substr(pos, posDelim - pos);
 
-        if (opcode.find_first_not_of("._ABCDEFGHIJKLMNOPQRSTUVWXYZ") != std::string::npos)
+        if (opcode.find_first_not_of("._ABCDEFGHIJKLMNOPQRSTUVWXYZ3264") != std::string::npos)
         {
             LineError("Invalid instruction \"" << opcode << "\".");
             return;
+        }
+        else if (opcode == "" || opcode[0] == ';' || opcode[0] == '/') // End if it's a comment.
+        {
+            return; 
         }
 
         // Try to read arguments (max 3).
@@ -225,8 +284,27 @@ namespace Assembly {
             pos = line.find_first_not_of(whitespace, posDelim);
             if (pos != std::string::npos)
             {
-                posDelim = std::min(line.find(",", pos), len); // Cap to string length if not found.
                 size_t posComment = std::min(line.find_first_of(";/", pos), len); // Cap to string length if not found.
+                size_t posString = line.find('"', pos);
+                posDelim = std::min(line.find(",", pos), len); // Cap to string length if not found.
+                if (posDelim > posComment)
+                    posDelim = len;
+
+                if (posString != std::string::npos && posString < posComment && posString < posDelim)
+                {
+                    posDelim = line.find('"', posString + 1);
+                    if (posDelim == std::string::npos)
+                    {
+                        LineError("Invalid argument. String has no ending \".");
+                        break;
+                    }
+
+                    args[i] = line.substr(posString, (posDelim+1) - posString);
+
+                    posDelim = std::min(line.find(",", posDelim), len); // Cap to string length if not found.
+                    continue;
+                }
+
                 if (posDelim != len && posDelim < posComment)
                 {
                     args[i] = RemoveWhitespace(line.substr(pos, posDelim - pos));
@@ -245,6 +323,12 @@ namespace Assembly {
                 }
             }
         }
+
+        uint64_t sizeArg = 0;
+        if (opcode == ".WORD")
+            sizeArg = std::stoull(args[0]);
+
+        size_t instrWordSize = GetInstructionSize(opcode, sizeArg);
 
         // Output the opcode and arguments to workingText.
         if (opcode != "")
@@ -271,17 +355,17 @@ namespace Assembly {
              workingText << ";" << args[2];
 
         workingText << ";" << std::endl;
-        m_instrNbr++;
+        m_instrAddr += instrWordSize;
     }
 
-    Instruction Assembler::AssembleLine(std::string& line)
+    void Assembler::AssembleLine(std::string& line, std::iostream& binaryOutput)
     {
         size_t start = 0;
         size_t end = 0;
         std::string opcode = "";
         std::string parsedArgs[3] = {"", "", ""};
         
-        uint32_t args[3] = {0U, 0U, 0U};
+        uint64_t args[3] = {0U, 0U, 0U};
         
         end = line.find(';');
         opcode = line.substr(start, end);
@@ -293,50 +377,94 @@ namespace Assembly {
             if (end != std::string::npos)
             {
                 parsedArgs[i] = line.substr(start, end - start);
-                args[i] = EvaluateArgument(parsedArgs[i]);
+                
+                if (opcode != ".WORD")
+                    args[i] = EvaluateArgument(parsedArgs[i]);
 
-                // TODO: check integer sizes of argument based on i and opcode.
+                // TODO: check integer size of argument based on i and opcode.
             }
             else
                 break;
         }
 
-        std::stringstream finalTranslation;
-        finalTranslation << opcode;
+        // Instruction size in words (1 word = 32 bits).
+        uint64_t sizeArg = 0;
+        if (opcode == ".WORD")
+            sizeArg = std::stoull(parsedArgs[0]);
+
+        size_t instrWordSize = GetInstructionSize(opcode, sizeArg);
         
-        if (parsedArgs[0] != "")
-             finalTranslation << ";" << args[0];
-        if (parsedArgs[1] != "")
-             finalTranslation << ";" << args[1];
-        if (parsedArgs[2] != "")
-             finalTranslation << ";" << args[2];
+        BinaryInstruction result = TranslateInstruction(opcode, args);
 
-        finalTranslation << ";";
-
-        Instruction result = 0x0;
-
-        // Do a horrible attempt at formatting into columns.
-        if (m_flags & FLAG_SHOW_TRANSLATION)
+        if (opcode == ".WORD") // Output an arbitrary number of words. Used for program data.
         {
-            std::string instrNbr = "[" + std::to_string(m_instrNbr) + "]";
-            std::cout << std::setfill(' ') << std::left << std::setw(9) << instrNbr << std::setw(32) << line << 
-                std::setw(18) << finalTranslation.str() << "0x" << std::setfill('0') << std::right << 
-                std::setw(8) << std::hex << result << std::dec << std::endl;
+            if (parsedArgs[1][0] == '"')
+            {
+                // If it's a string, remove "" characters.
+                parsedArgs[1] = parsedArgs[1].substr(1, parsedArgs[1].length() - 2);
+                binaryOutput.write(parsedArgs[1].c_str() + '\0', instrWordSize * 4);
+            }
+            else if (parsedArgs[1].find('.') != std::string::npos) // If it's floating-point data.
+            {
+                if (parsedArgs[1].back() == 'f')
+                    binaryOutput << std::stof(parsedArgs[1]); // Suffix == f ? Treat as float.
+                else
+                    binaryOutput << std::stod(parsedArgs[1]); // No suffix? Treat as double.
+            }
+            else
+            {
+                if (instrWordSize == 1)
+                    binaryOutput << static_cast<uint32_t>(std::stoul(parsedArgs[1]));
+                else if (instrWordSize == 2)
+                    binaryOutput << static_cast<uint64_t>(std::stoull(parsedArgs[1]));
+            }
+        }
+        // If not a .WORD directive, output instructions.
+        else if (instrWordSize == 1)
+            binaryOutput << result.instr4;
+        else if (instrWordSize == 2)
+            binaryOutput << result.instr8;
+        else if (instrWordSize == 3)
+            binaryOutput << result.instr12;
+        else
+        {
+            InstructionError("Invalid instruction size: " << instrWordSize);
+            return;
+        } 
+
+        // Do a horrible attempt at formatting output into columns.
+        if ((m_flags & FLAG_SHOW_TRANSLATION) /* && opcode != ".WORD" */)
+        {
+            std::stringstream finalTranslation;
+            finalTranslation << opcode;
+            
+            if (parsedArgs[0] != "")
+                finalTranslation << ";" << args[0];
+            if (parsedArgs[1] != "")
+                finalTranslation << ";" << args[1];
+            if (parsedArgs[2] != "")
+                finalTranslation << ";" << args[2];
+
+            finalTranslation << ";";
+
+            char instrAddr[13];
+            std::snprintf(instrAddr, 13, "[0x%.8X]", m_instrAddr);
+
+            char instrHex[13];
+            std::snprintf(instrHex, 13, "(0x%.8X)", result.instr4);
+
+            std::cout << std::setfill(' ') << std::left << std::setw(13) << instrAddr << std::setw(32) << line <<
+                std::setw(20) << finalTranslation.str() << instrHex << std::endl;
         }
 
-        return result;
+        m_instrAddr += instrWordSize;
     }
 
-    size_t Assembler::Assemble(std::ifstream& textInput, const std::string& outPath)
+    //---- PUBLIC --------------------------------------------------------------------------------//
+
+    size_t Assembler::Assemble(std::istream& textInput, std::iostream& binaryOutput)
     {
         m_hasError = false;
-
-        std::ofstream outFile(outPath, std::ios::binary);
-        if (!outFile.is_open())
-        {
-            std::cerr << "Could not create \"" << outPath << "\"." << std::endl;
-            return 0;
-        }
 
         // Temporary stream of assembly source that can be altered by the first pass,
         // and then read from by the second pass.
@@ -346,10 +474,10 @@ namespace Assembly {
             std::cout << "-------- FIRST PASS START --------" << std::endl;
         
         std::string line;
-        for (m_lineNbr = 1, m_instrNbr = 0; std::getline(textInput, line); m_lineNbr++)
+        for (m_lineNbr = 1, m_instrAddr = 0; std::getline(textInput, line); m_lineNbr++)
         {
             if (m_flags & FLAG_SHOW_FIRST_PASS)
-                std::cout << m_lineNbr << " [" << m_instrNbr << "]\t" << line << std::endl;
+                std::cout << m_lineNbr << " [" << m_instrAddr << "]\t" << line << std::endl;
         
             FirstPassReadLine(line);
         }
@@ -357,14 +485,17 @@ namespace Assembly {
         if (m_flags & FLAG_SHOW_FIRST_PASS)
             std::cout << "-------- FIRST PASS END --------" << std::endl;
 
-        outFile.write((const char*)&m_binHeader, sizeof(m_binHeader));
+        // Write the header data first.
+        binaryOutput.write((const char*)&m_binHeader, sizeof(m_binHeader));
 
         if (m_flags & FLAG_SHOW_TRANSLATION)
             std::cout << "-------- SECOND PASS BEGIN --------" << std::endl;
 
-        for (m_instrNbr = 0; std::getline(workingText, line); m_instrNbr++)
+        // Begin the second pass, which actually starts to ouput binary.
+        m_instrAddr = 0;
+        while (std::getline(workingText, line))
         {
-            outFile << AssembleLine(line);
+            AssembleLine(line, binaryOutput);
         }
 
         if (m_flags & FLAG_SHOW_TRANSLATION)
@@ -374,14 +505,10 @@ namespace Assembly {
             m_labelDict.WarnAboutUnusedLabels();
 
         if (m_hasError)
-        {
-            outFile.close();
-            std::remove(outPath.c_str());
             return 0;
-        }
 
-        outFile.flush();
-        return m_instrNbr;
+        binaryOutput.flush();
+        return m_instrAddr * 4; // 1 word = 4 bytes.
     }
 }
 
@@ -411,12 +538,20 @@ int main(int argc, char* argv[])
     std::string outputPath = inputPath.substr(0, pathLastDot) + ".bin";
 
     Assembler assembler;
-
     assembler.SetFlags(FLAG_VERBOSE);
-    size_t binarySize = assembler.Assemble(inputFile, outputPath);
+
+    std::fstream outFile(outputPath, std::ios::binary | std::ios::out);
+    if (!outFile.is_open())
+    {
+        std::cerr << "Could not create \"" << outputPath << "\"." << std::endl;
+        return 0;
+    }
+
+    // Assemble the inputFile stream of assembly text into the binary output file.
+    size_t binarySize = assembler.Assemble(inputFile, outFile);
 
     if (binarySize > 0)
-        std::cout << "Assembly successful! Instructions total: " << binarySize << "." << std::endl;
+        std::cout << "Assembly successful! Wrote " << binarySize << " bytes." << std::endl;
     else
         std::cout << "Assembly failed!" << std::endl;
 

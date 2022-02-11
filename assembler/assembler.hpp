@@ -8,6 +8,7 @@
 #include <iomanip>
 
 #include "label.hpp"
+#include "encoder.hpp"
 
 namespace Assembly 
 {
@@ -23,6 +24,9 @@ namespace Assembly
     constexpr AssemblerFlags FLAG_SUPPRESS_ALL_ERRORS = 0x8;
 
     constexpr AssemblerFlags FLAG_VERBOSE = FLAG_SHOW_TRANSLATION;
+
+    // Forward declare
+    extern BinaryInstruction TranslateInstruction(const std::string& opcode, uint64_t* args);
 
     struct BinaryHeader
     {
@@ -40,24 +44,28 @@ namespace Assembly
         bool m_hasError;
         size_t m_lastError;
         size_t m_lineNbr;
-        Address m_instrNbr;
+        Address m_instrAddr;            // Instruction addresses are all in word-space (4 bytes per word).
         AssemblerFlags m_flags;
         std::stringstream workingText;
         BinaryHeader m_binHeader;
         LabelDictionary m_labelDict;
 
+        std::string ToLowerCase(const std::string& str) const;
         std::string RemoveWhitespace(const std::string& str) const;
+        size_t GetInstructionSize(const std::string& opcode, uint64_t arg0) const;
+        BinaryInstruction TranslateInstruction(const std::string& opcode, uint64_t* args) const;
         uint32_t EvaluateArgument(const std::string& arg);
-        void ExecAssemblerDirective(const std::string& directive, std::string args[3]);
+        void ExecAssemblerDirective(const std::string& directive, const std::string* args);
         void FirstPassReadLine(std::string& line);
-        Instruction AssembleLine(std::string& line);
+        void AssembleLine(std::string& line, std::iostream& binaryOutput);
 
     public:
         Assembler();
 
         // Attempts to assemble the textInput stream of assembly into its corresponding binary format.
-        // Returns the number of instructions in the generated binary file.
-        size_t Assemble(std::ifstream& textInput, const std::string& outPath);
+        // Returns the number of bytes that was successfully generated.
+        // Returns 0 on assembly error.
+        size_t Assemble(std::istream& textInput, std::iostream& binaryOutput);
 
         // If no flags are set, the assembler will show all errors and warnings by default.
         inline void SetFlags(AssemblerFlags flags) { m_flags = flags; }

@@ -5,8 +5,7 @@
 // Execution starts here.
       JMP     init                  // Start by jumping to init.
 
-init:
-      NOP	                          ; Do nothing.
+init: NOP	                          ; Do nothing.
       NOP
       NOP	                          // Do nothing.
       JMP	    main                  ; Jump to main.
@@ -23,3 +22,16 @@ main:  // Entry point.
       LDI     R1,     6             // Load 6 into R1.
       ADD     R0,     R1,     R2
       SUB     R0,     R1,     R2    ; Subtract
+
+      LDA     R10,    str1          ; Load address of "str1" into R10
+      LDP     R11,    static_int    ; Load value of "static_int" into R11
+      LDP.F   R12,    static_float  ; Load value of "static_float" into R12
+      LDP.F64 R14,    static_double ; Load value of "static_double" into R14
+
+// Data
+
+str1:             .WORD 4, "Hello, there"   ; Strings are implicitly zero-terminated.
+str2:             .WORD 2, "Example"        ; The first argument specifies how many words to allocate.
+static_int:       .WORD 1, 1024
+static_float:     .WORD 1, 4.81f            ; Float must be suffixed with 'f', otherwise
+static_double:    .WORD 2, 4.81             ; they are interpreted as doubles, which are 2 words.
