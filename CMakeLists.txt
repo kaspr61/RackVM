@@ -4,6 +4,7 @@ project(Assembler)
 
 set(TARGET_ASM asm)
 set(TARGET_VM  vm)
+set(TARGET_DECODING decoding-exp)
 
 add_subdirectory(assembler)
 add_subdirectory(vm)

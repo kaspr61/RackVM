@@ -1,7 +1,6 @@
-set(CXX_STANDARD 11)
-set(CXX_STANDARD_REQUIRED true)
-
 add_executable(${TARGET_ASM})
+
+set_property(TARGET ${TARGET_ASM} PROPERTY CXX_STANDARD 11)
 
 target_sources(${TARGET_ASM}
     PRIVATE
