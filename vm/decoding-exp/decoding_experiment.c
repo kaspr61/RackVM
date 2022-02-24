@@ -5,7 +5,7 @@
 #include <time.h>
 #include <math.h>
 
-#define SAMPLE_SIZE 20          // Will take roughly 6 minutes, depending on the processor.
+#define SAMPLE_SIZE 20
 #define ITERATION_SIZE 40000
 #define TOTAL_ITERATIONS ((size_t)ITERATION_SIZE * ITERATION_SIZE)
 
@@ -111,7 +111,7 @@ int main(int argc, char **argv)
 
         duration = (double)(end - start) / CLOCKS_PER_SEC;
         avg_union += duration;
-        printf("\tUnion: %.4f\n", duration);
+        printf("\tUnion:   %.4f\n", duration);
     }
 
     duration = (double)(clock() - exp_start) / CLOCKS_PER_SEC;
@@ -129,7 +129,7 @@ int main(int argc, char **argv)
         avg_union, avg_union_ratio);
 
     printf("Unions are %.2f%% %s than bitmasking.\n", 
-        fabs((avg_bitmask_ratio - 1.0) * 100.0), 
+        fabs((avg_union_ratio - 1.0) * 100.0), 
         avg_union < avg_bitmask ? "faster" : "slower");
 
     return 0;

@@ -8,5 +8,5 @@ target_sources(${TARGET_DECODING}
 )
 
 if (CMAKE_BUILD_TYPE STREQUAL Release)
-    set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
+    set(CMAKE_C_FLAGS_RELEASE "-O1 -DNDEBUG")
 endif()
