@@ -53,6 +53,10 @@
         "iomanip": "cpp",
         "xlocmon": "cpp",
         "xloctime": "cpp",
-        "functional": "cpp"
+        "functional": "cpp",
+        "*.yy": "cpp",
+        "*.l": "cpp",
+        "map": "cpp",
+        "xtree": "cpp"
     }
 }
