@@ -33,6 +33,7 @@ target_sources(${TARGET_COMPILER}
     PRIVATE
         compiler.cpp    compiler.hpp
         lexer.hpp
+        types.hpp
         ${BISON_RackParser_OUTPUTS}
         ${FLEX_RackLexer_OUTPUTS}
 )

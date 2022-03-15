@@ -5,6 +5,7 @@
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <vector>
 
 #include "parser.hpp"
 #include "lexer.hpp"
@@ -13,6 +14,9 @@ namespace Compiler
 {
     class RackCompiler
     {
+    private:
+        std::vector<func> m_funcList;
+
     public:
         std::map<std::string, int> m_vars;
         int m_result;
@@ -26,6 +30,8 @@ namespace Compiler
         ~RackCompiler();
 
         int Parse(const std::string& file);
+
+        void AddFunction(DataType dataType, std::string&& id, std::vector<stmt>&& statements);
     };
 }
 

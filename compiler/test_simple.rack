@@ -1,0 +1,9 @@
+int test()
+{
+    int a;
+    a = 5 * 2;
+    int b = a + func();
+    
+    if (a < 5)
+        a = 5;
+}

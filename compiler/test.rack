@@ -1,2 +1,11 @@
-b = 10
-a = 5 + 13 * b
+b = 10;
+a = 5 + 13 * (func() < (b is not 15));
+func();
+
+if (a equals b or (not c and a is below b) and b is above c)
+{
+    if (not (func() is above 0))
+        func();
+        
+    a = b + 15;
+}
