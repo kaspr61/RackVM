@@ -57,6 +57,7 @@
         "*.yy": "cpp",
         "*.l": "cpp",
         "map": "cpp",
-        "xtree": "cpp"
+        "xtree": "cpp",
+        "locale.h": "c"
     }
 }
