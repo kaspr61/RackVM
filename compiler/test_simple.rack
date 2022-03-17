@@ -1,9 +1,10 @@
 int test()
 {
-    int a;
-    a = 5 * 2;
-    int b = a + func();
-    
-    if (a < 5)
-        a = 5;
+    int a = 5;
+    if (a equals 5)
+    {
+        int b = 100;
+    }
+
+    a = b;
 }

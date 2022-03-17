@@ -33,6 +33,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <fstream>
 #include <map>
 #include <vector>
+#include <algorithm>
 
 #include "parser.hpp"
 #include "lexer.hpp"
@@ -42,11 +43,13 @@ namespace Compiler
     class RackCompiler
     {
     private:
+        using ScopedVars = std::map<std::string, identifier>;
+
         std::vector<func> m_funcList;
+        std::vector<ScopedVars> m_scopes;
+        func m_currFunction;
 
     public:
-        std::map<std::string, int> m_vars;
-        int m_result;
         std::string m_file;
         bool m_traceParsing;    // Whether to generate parsing debug traces.
 
@@ -58,7 +61,15 @@ namespace Compiler
 
         int Parse(const std::string& file);
 
-        void AddFunction(DataType dataType, std::string&& id, std::vector<stmt>&& statements);
+        void  AddFunc(std::vector<stmt>&& statements);
+        void  DeclFunc(DataType dataType, std::string&& id);
+        const identifier& DeclVar(DataType dataType, std::string&& varId, identifier_type idType);
+        const identifier& UseVar(std::string&& varId) const;
+        const func& UseFunc(const std::string& funcId) const;
+        
+        inline void EnterScope() { m_scopes.emplace_back(); }
+        inline void ExitScope()  { m_scopes.pop_back(); }
+
     };
 }
 

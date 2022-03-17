@@ -29,25 +29,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 namespace Compiler
 {
-    static std::string to_string(DataType dataType)
-    {
-        switch (dataType)
-        {
-            case DataType::INT:    return "int";
-            case DataType::LONG:   return "long";
-            case DataType::CHAR:   return "char";
-            case DataType::FLOAT:  return "float";
-            case DataType::DOUBLE: return "double";
-            case DataType::STRING: return "string";
-            case DataType::UNDEFINED: 
-            default: return "void";
-        }
-
-        return "";
-    }
-
     RackCompiler::RackCompiler() :
-        m_traceParsing(false)
+        m_traceParsing(false),
+        m_currFunction()
     {
     }
 
@@ -69,34 +53,84 @@ namespace Compiler
         return parser.parse() == 0;
     }
 
-    void RackCompiler::AddFunction(DataType dataType, std::string&& id, std::vector<stmt>&& statements)
+    void RackCompiler::AddFunc(std::vector<stmt>&& statements)
     {
-        func fun = {};
-        fun.statements = std::move(statements);
-        fun.identifier = std::move(id);
-        fun.returnType = dataType;
+        m_currFunction.statements = std::move(statements);
 
-        std::cout << "Added function \"" << to_string(fun.returnType) << " " << fun.identifier << "\":" << std::endl;
+        std::cout << "Added function \"" << m_currFunction.id << "\":" << std::endl;
 
-        auto it = fun.statements.begin();
-        while (it != fun.statements.end())
+        auto it = m_currFunction.statements.begin();
+        while (it != m_currFunction.statements.end())
             std::cout << "--- " << *it++ << std::endl;
 
-        m_funcList.push_back(std::move(fun));
+        m_funcList.push_back(std::move(m_currFunction));
+        m_currFunction = {};
+    }
+
+    void RackCompiler::DeclFunc(DataType dataType, std::string&& id)
+    {
+        func& fun = m_currFunction;
+        fun.id = identifier(identifier_type::FUNC_NAME, std::move(id), 0, dataType);
+        fun.returnType = dataType;
+    }
+
+    const identifier& RackCompiler::DeclVar(DataType dataType, std::string&& varId, identifier_type idType)
+    {
+        if (m_scopes.empty())
+            throw RackParser::syntax_error(m_location, "Variables may not be declared in global scope.");
+        
+        auto result = m_scopes.back().emplace(varId, 
+            identifier(idType, varId, m_currFunction.localVarCnt++, dataType));
+            
+        if (!result.second)
+            throw RackParser::syntax_error(m_location, "\""+varId+"\" has already been defined.");
+
+        return result.first->second;
+    }
+
+    const identifier& RackCompiler::UseVar(std::string&& varId) const
+    {
+        for (auto it = m_scopes.rbegin(); it != m_scopes.rend(); ++it)
+        {
+            const ScopedVars& vars = *it;
+            auto result = vars.find(varId);    
+            if (result != vars.end())
+                return (*result).second;
+
+        }
+        
+        throw RackParser::syntax_error(m_location, "Unknown identifier \""+varId+"\".");
+    }
+
+    const func& RackCompiler::UseFunc(const std::string& funcId) const
+    {
+        const func* function;
+        auto it = std::find_if(m_funcList.begin(), m_funcList.end(),
+            [=](const func& e) { return e.id.id == funcId; });
+         
+        if (it != m_funcList.end())
+            function = &*it;
+        else
+            function = &m_currFunction;
+
+        if (function == nullptr || function->id.id != funcId)
+            throw RackParser::syntax_error(m_location, "Unknown function \""+funcId+"\".");
+
+        return *function;
     }
 
     std::ostream& operator <<(std::ostream& os, const stmt& s)
     {
         switch (s.type)
         {
-            case stmt_type::ASSIGNMENT: os << "assign: " << s.identifier << 
+            case stmt_type::ASSIGNMENT: os << "assign: (" << s.id.dataType << ") " << s.id << 
                 " = expr{" << s.expression << "}"; 
                 break;
 
-            case stmt_type::DECLARATION: os << "decl: " << s.dataType << " " << s.identifier; 
+            case stmt_type::DECLARATION: os << "decl: " << s.id.dataType << " " << s.id; 
                 break;
 
-            case stmt_type::INITIALIZATION: os << "init: " << s.dataType << " " << s.identifier << 
+            case stmt_type::INITIALIZATION: os << "init: " << s.id.dataType << " " << s.id << 
                 " = expr{" << s.expression << "}"; 
                 break;
 
@@ -153,11 +187,39 @@ namespace Compiler
         return os;
     }
 
+    std::ostream& operator <<(std::ostream& os, const identifier_type& id)
+    {
+        switch (id)
+        {
+            case identifier_type::LOCAL_VAR: os << "L";         break;
+            case identifier_type::PARAM_VAR: os << "P";         break;
+            case identifier_type::FUNC_NAME: os << "function";  break;
+
+            default: os << "unknown identifier_type";     break;
+        }
+
+        return os;
+    }
+
+    std::ostream& operator <<(std::ostream& os, const identifier& id)
+    {
+        switch (id.type)
+        {
+            case identifier_type::LOCAL_VAR:
+            case identifier_type::PARAM_VAR: os << id.id << "<" << id.type << id.position << ">"; break;
+            case identifier_type::FUNC_NAME: os << id.id << "<" << id.dataType << ">()"; break;
+
+            default: os << "unknown identifier \" " << id.id << "\"";     break;
+        }
+
+        return os;
+    }
+
     std::ostream& operator <<(std::ostream& os, const expr& e)
     {
         switch (e.type)
         {
-            case expr_type::ID:     os << e.strValue;     break;
+            case expr_type::ID:     os << e.id;                                                            break;
             case expr_type::NUMBER: os << (e.dataType == DataType::INT ? e.intValue : e.longValue);        break;
             case expr_type::ADD:    os << "(" << e.operands.front() << " + " << e.operands.back() << ")";  break;
             case expr_type::SUB:    os << "(" << e.operands.front() << " - " << e.operands.back() << ")";  break;
@@ -171,8 +233,8 @@ namespace Compiler
             case expr_type::LEQ:    os << "(" << e.operands.front() << " <= " << e.operands.back() << ")"; break;
             case expr_type::OR:     os << "(" << e.operands.front() << " || " << e.operands.back() << ")"; break;
             case expr_type::AND:    os << "(" << e.operands.front() << " && " << e.operands.back() << ")"; break;
-            case expr_type::NEG:    os << "(-(" << e.operands.front() << ")";     break;
-            case expr_type::CALL:   os << e.operands.front().strValue << "()";   break;
+            case expr_type::NEG:    os << "(-(" << e.operands.front() << ")";                              break;
+            case expr_type::CALL:   os << e.operands.front().id;                                           break;
 
             default: os << "unknown expr";     break;
         }
@@ -199,10 +261,7 @@ int main(int argc, char* argv[])
         }
     }
 
-    if (!compiler.Parse(argv[1]))
-    {
-        std::cout << compiler.m_result << std::endl;
-    }
+    std::cout << compiler.Parse(argv[1]) << std::endl;
 
     return 0;
 }

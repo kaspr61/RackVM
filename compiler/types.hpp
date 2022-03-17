@@ -35,6 +35,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 namespace Compiler
 {
+    struct func;
+    struct stmt;
+
     enum class DataType
     {
         UNDEFINED,
@@ -82,6 +85,42 @@ namespace Compiler
 
     extern std::ostream& operator <<(std::ostream& os, const expr_type& e);
 
+    enum class identifier_type
+    {
+        UNDEFINED,
+        LOCAL_VAR,
+        PARAM_VAR,
+        FUNC_NAME
+    };
+
+    extern std::ostream& operator <<(std::ostream& os, const identifier_type& e);
+
+    struct identifier
+    {
+        identifier_type type;
+        std::string     id;
+        size_t          position;
+        DataType        dataType;
+
+        identifier() : 
+            type(identifier_type::UNDEFINED), id(), position(0), dataType(DataType::UNDEFINED)
+            {}
+
+        identifier(identifier_type type, const std::string& id, size_t position, DataType dataType) :
+            type(type), id(id), position(position), dataType(dataType) 
+            {}
+
+        friend std::ostream& operator <<(std::ostream& os, const identifier& s);
+    };
+
+    struct func
+    {
+        DataType           returnType;
+        identifier         id;
+        std::vector<stmt>  statements;
+        size_t             localVarCnt;
+    };
+
     struct expr
     {
         union {
@@ -89,10 +128,10 @@ namespace Compiler
             int64_t longValue;
         };
         
-        std::string strValue;
-     
-        expr_type type;
-        DataType dataType;
+        identifier      id;
+        expr_type       type;
+        DataType        dataType;
+        const func*     function;
         std::list<expr> operands;
 
         expr() : dataType(DataType::UNDEFINED) {}
@@ -104,9 +143,17 @@ namespace Compiler
             operands{std::forward<T>(args)...} 
             {}
 
-        expr(std::string&& value) : type(expr_type::ID), dataType(DataType::UNDEFINED), strValue(std::move(value)) {}
+        expr(const identifier& value) : type(expr_type::ID), dataType(DataType::UNDEFINED), id(value) {}
+        expr(identifier&& value) : type(expr_type::ID), dataType(DataType::UNDEFINED), id(std::move(value)) {}
         expr(int32_t value) : type(expr_type::NUMBER), dataType(DataType::INT), intValue(value) {}
         expr(int64_t value) : type(expr_type::NUMBER), dataType(DataType::LONG), longValue(value) {}
+
+        expr(const func& value) : 
+            type(expr_type::ID), 
+            dataType(DataType::UNDEFINED), 
+            id(value.id), 
+            function(&value) 
+            {}
 
         friend std::ostream& operator <<(std::ostream& os, const expr& s);
     };
@@ -114,57 +161,37 @@ namespace Compiler
     struct stmt
     {
         stmt_type   type;
-        DataType    dataType;
-        std::string identifier;
+        identifier  id;
         expr        expression;
 
         stmt() :
             type(stmt_type::UNDEFINED),
-            dataType(DataType::UNDEFINED),
-            identifier(),
+            id(),
             expression()
         {
         }
 
         stmt(stmt_type type, expr&& expr) : 
-            type(type),
-            expression(std::move(expr))
+            type(type)
         {
         }
 
         // For variable declaration.
-        stmt(stmt_type type, DataType dataType, std::string&& id) :
+        stmt(stmt_type type, const identifier& id) :
             type(type),
-            dataType(dataType), 
-            identifier(std::move(id))
+            id(id)
         {
         }
 
-        // For variable assignment.
-        stmt(stmt_type type, std::string&& id, expr&& expr) :
+        // For variable assignment / initialization.
+        stmt(stmt_type type, const identifier& id, expr&& expr) :
             type(type), 
-            identifier(std::move(id)),
-            expression(std::move(expr))
-        {
-        }
-
-        // For variable declaration + initialization.
-        stmt(stmt_type type, DataType dataType, std::string&& id, expr&& expr) :
-            type(type),
-            dataType(dataType), 
-            identifier(std::move(id)),
+            id(id),
             expression(std::move(expr))
         {
         }
 
         friend std::ostream& operator <<(std::ostream& os, const stmt& s);
-    };
-
-    struct func
-    {
-        DataType          returnType;
-        std::string       identifier;
-        std::vector<stmt> statements;
     };
 }
 

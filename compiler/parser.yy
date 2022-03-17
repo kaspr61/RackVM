@@ -146,23 +146,23 @@ number: NUM_INT                {$$ = expr($1);}
       | NUM_LONG               {$$ = expr($1);}
       ;
 
-funcs: funcs func               {}
-     | func                     {}
+funcs: funcs func               {cmp.ExitScope();}
+     | func                     {cmp.ExitScope();}
      ;
 
-func: ID L_PAR R_PAR L_CURL stmts R_CURL           {cmp.AddFunction(DataType::UNDEFINED, M($1), M($5));}
-    | data_type ID L_PAR R_PAR L_CURL stmts R_CURL {cmp.AddFunction($1, M($2), M($6));}
+func: {cmp.EnterScope();} ID L_PAR R_PAR L_CURL {cmp.DeclFunc(DataType::UNDEFINED, M($2));} stmts R_CURL {cmp.AddFunc(M($7));}
+    | {cmp.EnterScope();} data_type ID L_PAR R_PAR L_CURL {cmp.DeclFunc($2, M($3));} stmts R_CURL        {cmp.AddFunc(M($8));}
     ;
 
 stmts: stmts stmt               {$$ = M($1); $$.push_back(M($2));}
      | %empty                   {}
      ;
 
-stmt: data_type ID SEMICOLON             {$$ = stmt(stmt_type::DECLARATION, $1, M($2));}
-    | ID ASSIGN expr SEMICOLON           {$$ = stmt(stmt_type::ASSIGNMENT, M($1), M($3));}
-    | data_type ID ASSIGN expr SEMICOLON {$$ = stmt(stmt_type::INITIALIZATION, $1, M($2), M($4));}
+stmt: data_type ID SEMICOLON             {$$ = stmt(stmt_type::DECLARATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR));}
+    | ID ASSIGN expr SEMICOLON           {$$ = stmt(stmt_type::ASSIGNMENT, cmp.UseVar(M($1)), M($3));}
+    | data_type ID ASSIGN expr SEMICOLON {$$ = stmt(stmt_type::INITIALIZATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR), M($4));}
     | expr SEMICOLON                     {$$ = stmt(stmt_type::EXPRESSION, M($1));}
-    | cond_stmt                          {}
+    | {cmp.EnterScope();} cond_stmt      {cmp.ExitScope();}
     ;
 
 cond_stmt: IF L_PAR expr R_PAR L_CURL stmts R_CURL {}
@@ -170,7 +170,7 @@ cond_stmt: IF L_PAR expr R_PAR L_CURL stmts R_CURL {}
          ;
 
 
-expr: ID                        {$$ = expr(M($1));}
+expr: ID                        {$$ = expr(cmp.UseVar(M($1)));}
     | number                    {$$ = M($1);}
     | L_PAR expr R_PAR          {$$ = M($2);}
     | binary_expr               {$$ = M($1);}
@@ -196,7 +196,7 @@ unary_expr: MINUS expr          {$$ = expr(expr_type::NEG, M($2));}
           | NOT expr            {$$ = expr(expr_type::EQ,  M($2), 0);}
           ;
 
-func_call: ID L_PAR R_PAR       {$$ = expr(expr_type::CALL, expr(M($1)));}
+func_call: ID L_PAR R_PAR       {$$ = expr(expr_type::CALL, cmp.UseFunc($1));}
          ;
 
 %%
