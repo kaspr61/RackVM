@@ -59,8 +59,8 @@ namespace Compiler
         ASSIGNMENT,
         INITIALIZATION,
         EXPRESSION,
-        IF,
-        IF_ELSE
+        BRANCH,     // Contains multiple 1 or more block statements.
+        BLOCK       // A block of statements, used for branching.
     };
 
     enum class expr_type
@@ -160,19 +160,21 @@ namespace Compiler
     
     struct stmt
     {
-        stmt_type   type;
-        identifier  id;
-        expr        expression;
+        stmt_type         type;
+        identifier        id;
+        std::list<expr>   expressions;
+        std::vector<stmt> substmts = std::vector<stmt>(1);
 
         stmt() :
             type(stmt_type::UNDEFINED),
             id(),
-            expression()
+            expressions()
         {
         }
 
         stmt(stmt_type type, expr&& expr) : 
-            type(type)
+            type(type),
+            expressions({std::move(expr)})
         {
         }
 
@@ -187,7 +189,22 @@ namespace Compiler
         stmt(stmt_type type, const identifier& id, expr&& expr) :
             type(type), 
             id(id),
-            expression(std::move(expr))
+            expressions({std::move(expr)})
+        {
+        }
+
+        // For if-statements
+        stmt(stmt_type type, expr&& cond_expr, std::vector<stmt>&& stmts) : 
+            type(type),
+            expressions({std::move(cond_expr)}),
+            substmts(stmts)
+        {
+        }
+
+        // For block-statements.
+        stmt(stmt_type type, std::vector<stmt>&& stmts) : 
+            type(type),
+            substmts(stmts)
         {
         }
 

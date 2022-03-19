@@ -124,17 +124,17 @@ namespace Compiler
         switch (s.type)
         {
             case stmt_type::ASSIGNMENT: os << "assign: (" << s.id.dataType << ") " << s.id << 
-                " = expr{" << s.expression << "}"; 
+                " = expr{" << s.expressions.front() << "}"; 
                 break;
 
             case stmt_type::DECLARATION: os << "decl: " << s.id.dataType << " " << s.id; 
                 break;
 
             case stmt_type::INITIALIZATION: os << "init: " << s.id.dataType << " " << s.id << 
-                " = expr{" << s.expression << "}"; 
+                " = expr{" << s.expressions.front() << "}"; 
                 break;
 
-            case stmt_type::EXPRESSION: os << "expr: " << s.expression; 
+            case stmt_type::EXPRESSION: os << "expr: " << s.expressions.front(); 
                 break;
 
             default: os << "Other"; break;

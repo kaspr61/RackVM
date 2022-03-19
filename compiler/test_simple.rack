@@ -5,6 +5,4 @@ int test()
     {
         int b = 100;
     }
-
-    a = b;
 }

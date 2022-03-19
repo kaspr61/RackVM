@@ -96,6 +96,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  /* Keywords */
 %token
     IF      "if"
+    ELIF    "elif"
     ELSE    "else"
     WHILE   "while"
     INT     "int"
@@ -112,8 +113,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
  /* Rules with types */
 %type<func> func
-%type<std::vector<stmt>> stmts
-%type<stmt> stmt cond_stmt
+%type<std::vector<stmt>> stmts elif_stmts
+%type<stmt> stmt cond_stmt if_stmt elif_stmt else_stmt
 %type<expr> expr number func_call binary_expr unary_expr
 %type<DataType> data_type
 
@@ -158,17 +159,34 @@ stmts: stmts stmt               {$$ = M($1); $$.push_back(M($2));}
      | %empty                   {}
      ;
 
-stmt: data_type ID SEMICOLON             {$$ = stmt(stmt_type::DECLARATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR));}
-    | ID ASSIGN expr SEMICOLON           {$$ = stmt(stmt_type::ASSIGNMENT, cmp.UseVar(M($1)), M($3));}
-    | data_type ID ASSIGN expr SEMICOLON {$$ = stmt(stmt_type::INITIALIZATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR), M($4));}
-    | expr SEMICOLON                     {$$ = stmt(stmt_type::EXPRESSION, M($1));}
-    | {cmp.EnterScope();} cond_stmt      {cmp.ExitScope();}
+stmt: data_type ID SEMICOLON            {$$ = stmt(stmt_type::DECLARATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR));}
+    | ID ASSIGN expr SEMICOLON          {$$ = stmt(stmt_type::ASSIGNMENT, cmp.UseVar(M($1)), M($3));}
+    | data_type ID ASSIGN expr SEMICOLON{$$ = stmt(stmt_type::INITIALIZATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR), M($4));}
+    | expr SEMICOLON                    {$$ = stmt(stmt_type::EXPRESSION, M($1));}
+    | {cmp.EnterScope();} cond_stmt     {$$ = M($2); cmp.ExitScope();}
     ;
 
-cond_stmt: IF L_PAR expr R_PAR L_CURL stmts R_CURL {}
-         | IF L_PAR expr R_PAR stmt                {}
+cond_stmt: if_stmt                                  {$$ = stmt(stmt_type::BRANCH, {M($1)});}
+         | if_stmt else_stmt                        {$$ = stmt(stmt_type::BRANCH, {M($1), M($2)});}
+         | if_stmt elif_stmts                       {$2.insert($2.begin(), M($1)); $$ = stmt(stmt_type::BRANCH, M($2));}
+         | if_stmt elif_stmts else_stmt             {$2.insert($2.begin(), M($1)); $2.insert($2.end(), M($3)); $$ = stmt(stmt_type::BRANCH, M($2));}
          ;
 
+if_stmt: IF L_PAR expr R_PAR L_CURL stmts R_CURL    {$$ = stmt(stmt_type::BLOCK, M($3), M($6));}
+       | IF L_PAR expr R_PAR stmt                   {$$ = stmt(stmt_type::BLOCK, M($3), {M($5)});}
+       ;
+
+elif_stmts: elif_stmts elif_stmt                    {$$ = M($1); $$.push_back(M($2));}
+          | elif_stmt                               {$$ = {M($1)};}
+          ;
+
+elif_stmt: ELIF L_PAR expr R_PAR L_CURL stmts R_CURL{$$ = stmt(stmt_type::BLOCK, M($3), M($6));}
+         | ELIF L_PAR expr R_PAR stmt               {$$ = stmt(stmt_type::BLOCK, M($3), {M($5)});}
+         ;
+
+else_stmt: ELSE L_CURL stmts R_CURL                 {$$ = stmt(stmt_type::BLOCK, M($3));}
+         | ELSE stmt                                {$$ = stmt(stmt_type::BLOCK, {M($2)});}
+         ;
 
 expr: ID                        {$$ = expr(cmp.UseVar(M($1)));}
     | number                    {$$ = M($1);}
@@ -201,7 +219,7 @@ func_call: ID L_PAR R_PAR       {$$ = expr(expr_type::CALL, cmp.UseFunc($1));}
 
 %%
 
-void Compiler::RackParser::error (const location_type& loc, const std::string& msg)
+void Compiler::RackParser::error(const location_type& loc, const std::string& msg)
 {
     std::cerr << loc << ": " << msg << '\n';
 }
