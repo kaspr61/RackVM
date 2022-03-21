@@ -32,13 +32,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <vector>
 #include <list>
 #include <ostream>
+#include <map>
+
+#define ARRAY_TO_BASE(x) (::Compiler::g_arrToBaseType[x])
 
 namespace Compiler
 {
     struct func;
     struct stmt;
 
-    enum class DataType
+    enum class DataType : unsigned char
     {
         UNDEFINED,
         INT,
@@ -46,27 +49,44 @@ namespace Compiler
         CHAR,
         FLOAT,
         DOUBLE,
-        STRING
-
+        STRING,
+        INT_ARR,
+        LONG_ARR,
+        FLOAT_ARR,
+        DOUBLE_ARR,
+        STRING_ARR
     };
 
     extern std::ostream& operator <<(std::ostream& os, const DataType& dataType);
+
+    static std::map<DataType, DataType> g_arrToBaseType = {
+        std::make_pair(DataType::INT_ARR, DataType::INT),
+        std::make_pair(DataType::LONG_ARR, DataType::LONG),
+        std::make_pair(DataType::FLOAT_ARR, DataType::FLOAT),
+        std::make_pair(DataType::DOUBLE_ARR, DataType::DOUBLE),
+        std::make_pair(DataType::STRING_ARR, DataType::STRING)
+        };
 
     enum class stmt_type
     {
         UNDEFINED,
         DECLARATION,
         ASSIGNMENT,
+        ASSIGN_OFFSET,
         INITIALIZATION,
         EXPRESSION,
         BRANCH,     // Contains multiple 1 or more block statements.
-        BLOCK       // A block of statements, used for branching.
+        BLOCK,      // A block of statements, used for branching.
+        CREATION,
+        DESTRUCTION
     };
 
     enum class expr_type
     {
         ID,
+        ID_OFFSET,
         NUMBER,
+        STRING,
         ADD,
         SUB,
         MUL,
@@ -124,9 +144,11 @@ namespace Compiler
     struct expr
     {
         union {
-            int32_t intValue;
-            int64_t longValue;
+            int32_t     intValue;
+            int64_t     longValue;
         };
+
+        std::string strValue;
         
         identifier      id;
         expr_type       type;
@@ -147,6 +169,7 @@ namespace Compiler
         expr(identifier&& value) : type(expr_type::ID), dataType(DataType::UNDEFINED), id(std::move(value)) {}
         expr(int32_t value) : type(expr_type::NUMBER), dataType(DataType::INT), intValue(value) {}
         expr(int64_t value) : type(expr_type::NUMBER), dataType(DataType::LONG), longValue(value) {}
+        expr(std::string&& value) : type(expr_type::STRING), dataType(DataType::STRING), strValue(std::move(value)) {}
 
         expr(const func& value) : 
             type(expr_type::ID), 
@@ -163,25 +186,28 @@ namespace Compiler
         stmt_type         type;
         identifier        id;
         std::list<expr>   expressions;
-        std::vector<stmt> substmts = std::vector<stmt>(1);
+        std::vector<stmt> substmts;
 
         stmt() :
             type(stmt_type::UNDEFINED),
             id(),
-            expressions()
+            expressions(),
+            substmts()
         {
         }
 
         stmt(stmt_type type, expr&& expr) : 
             type(type),
-            expressions({std::move(expr)})
+            expressions({std::move(expr)}),
+            substmts()
         {
         }
 
         // For variable declaration.
         stmt(stmt_type type, const identifier& id) :
             type(type),
-            id(id)
+            id(id),
+            substmts()
         {
         }
 
@@ -189,7 +215,17 @@ namespace Compiler
         stmt(stmt_type type, const identifier& id, expr&& expr) :
             type(type), 
             id(id),
-            expressions({std::move(expr)})
+            expressions({std::move(expr)}),
+            substmts()
+        {
+        }
+
+        // For indexed variable assignment, eg. numbers[5] = ...
+        stmt(stmt_type type, const identifier& id, std::list<expr>&& exprs) :
+            type(type), 
+            id(id),
+            expressions(std::move(exprs)),
+            substmts()
         {
         }
 

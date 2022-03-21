@@ -82,6 +82,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     R_PAR     ")"
     NOT       "not"
     EQ        "equals"
+    NEQ       "not equals"
     OR        "or"
     AND       "and"
     GT        ">"
@@ -90,13 +91,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     LEQ       "<="
     L_CURL    "{"
     R_CURL    "}"
+    L_SQ      "["
+    R_SQ      "]"
     SEMICOLON ";"
     ;
 
  /* Keywords */
 %token
     IF      "if"
-    ELIF    "elif"
     ELSE    "else"
     WHILE   "while"
     INT     "int"
@@ -105,16 +107,19 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     FLOAT   "float"
     DOUBLE  "double"
     STRING  "string"
+    CREATE  "create"
+    DESTROY "destroy"
 
  /* Dynamic tokens */
 %token<std::string> ID          "id"
 %token<int32_t>     NUM_INT     "int literal"
 %token<int64_t>     NUM_LONG    "long literal"
+%token<std::string> STR         "string literal"
 
  /* Rules with types */
 %type<func> func
-%type<std::vector<stmt>> stmts elif_stmts
-%type<stmt> stmt cond_stmt if_stmt elif_stmt else_stmt
+%type<std::vector<stmt>> stmts
+%type<stmt> stmt cond_stmt
 %type<expr> expr number func_call binary_expr unary_expr
 %type<DataType> data_type
 
@@ -122,6 +127,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 %printer { /*yyo << "VALUE: " << $$;*/ } <*>;
 
 %%
+
+%nonassoc IFX;
+%nonassoc ELSE;
 
 %right NOT;
 %left  PLUS MINUS;
@@ -141,10 +149,15 @@ data_type: INT                  {$$ = DataType::INT;}
          | FLOAT                {$$ = DataType::FLOAT;}
          | DOUBLE               {$$ = DataType::DOUBLE;}
          | STRING               {$$ = DataType::STRING;}
+         | INT PLUS             {$$ = DataType::INT_ARR;}
+         | LONG PLUS            {$$ = DataType::LONG_ARR;}
+         | FLOAT PLUS           {$$ = DataType::FLOAT_ARR;}
+         | DOUBLE PLUS          {$$ = DataType::DOUBLE_ARR;}
+         | STRING PLUS          {$$ = DataType::STRING_ARR;}
          ;
 
-number: NUM_INT                {$$ = expr($1);}
-      | NUM_LONG               {$$ = expr($1);}
+number: NUM_INT                 {$$ = expr($1);}
+      | NUM_LONG                {$$ = expr($1);}
       ;
 
 funcs: funcs func               {cmp.ExitScope();}
@@ -159,37 +172,25 @@ stmts: stmts stmt               {$$ = M($1); $$.push_back(M($2));}
      | %empty                   {}
      ;
 
-stmt: data_type ID SEMICOLON            {$$ = stmt(stmt_type::DECLARATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR));}
-    | ID ASSIGN expr SEMICOLON          {$$ = stmt(stmt_type::ASSIGNMENT, cmp.UseVar(M($1)), M($3));}
-    | data_type ID ASSIGN expr SEMICOLON{$$ = stmt(stmt_type::INITIALIZATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR), M($4));}
-    | expr SEMICOLON                    {$$ = stmt(stmt_type::EXPRESSION, M($1));}
-    | {cmp.EnterScope();} cond_stmt     {$$ = M($2); cmp.ExitScope();}
+stmt: data_type ID SEMICOLON                    {$$ = stmt(stmt_type::DECLARATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR));}
+    | ID ASSIGN expr SEMICOLON                  {$$ = stmt(stmt_type::ASSIGNMENT, cmp.UseVar(M($1)), M($3));}
+    | ID ASSIGN CREATE expr SEMICOLON           {$$ = stmt(stmt_type::CREATION, cmp.UseVar(M($1)), M($4));}
+    | ID L_SQ expr R_SQ ASSIGN expr SEMICOLON   {$$ = stmt(stmt_type::ASSIGN_OFFSET, cmp.UseVar(M($1)), {M($3), M($6)});}
+    | data_type ID ASSIGN expr SEMICOLON        {$$ = stmt(stmt_type::INITIALIZATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR), M($4));}
+    | data_type ID ASSIGN CREATE expr SEMICOLON {$$ = stmt(stmt_type::CREATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR), M($5));}
+    | DESTROY ID SEMICOLON                      {$$ = stmt(stmt_type::DESTRUCTION, cmp.UseVar(M($2)));}
+    | expr SEMICOLON                            {$$ = stmt(stmt_type::EXPRESSION, M($1));}
+    | cond_stmt                                 {$$ = M($1);}
+    | {cmp.EnterScope();} L_CURL stmts R_CURL   {$$ = stmt(stmt_type::BLOCK, M($3)); cmp.ExitScope();}
     ;
 
-cond_stmt: if_stmt                                  {$$ = stmt(stmt_type::BRANCH, {M($1)});}
-         | if_stmt else_stmt                        {$$ = stmt(stmt_type::BRANCH, {M($1), M($2)});}
-         | if_stmt elif_stmts                       {$2.insert($2.begin(), M($1)); $$ = stmt(stmt_type::BRANCH, M($2));}
-         | if_stmt elif_stmts else_stmt             {$2.insert($2.begin(), M($1)); $2.insert($2.end(), M($3)); $$ = stmt(stmt_type::BRANCH, M($2));}
-         ;
-
-if_stmt: IF L_PAR expr R_PAR L_CURL stmts R_CURL    {$$ = stmt(stmt_type::BLOCK, M($3), M($6));}
-       | IF L_PAR expr R_PAR stmt                   {$$ = stmt(stmt_type::BLOCK, M($3), {M($5)});}
-       ;
-
-elif_stmts: elif_stmts elif_stmt                    {$$ = M($1); $$.push_back(M($2));}
-          | elif_stmt                               {$$ = {M($1)};}
-          ;
-
-elif_stmt: ELIF L_PAR expr R_PAR L_CURL stmts R_CURL{$$ = stmt(stmt_type::BLOCK, M($3), M($6));}
-         | ELIF L_PAR expr R_PAR stmt               {$$ = stmt(stmt_type::BLOCK, M($3), {M($5)});}
-         ;
-
-else_stmt: ELSE L_CURL stmts R_CURL                 {$$ = stmt(stmt_type::BLOCK, M($3));}
-         | ELSE stmt                                {$$ = stmt(stmt_type::BLOCK, {M($2)});}
+cond_stmt: IF L_PAR expr R_PAR stmt %prec IFX {$$ = stmt(stmt_type::BRANCH, {stmt(stmt_type::BLOCK, M($3), {M($5)})});}
+         | IF L_PAR expr R_PAR stmt ELSE stmt {$$ = stmt(stmt_type::BRANCH, {stmt(stmt_type::BLOCK, M($3), {M($5)}), stmt(stmt_type::BLOCK, {M($7)})});}
          ;
 
 expr: ID                        {$$ = expr(cmp.UseVar(M($1)));}
     | number                    {$$ = M($1);}
+    | STR                       {$$ = expr(M($1));}
     | L_PAR expr R_PAR          {$$ = M($2);}
     | binary_expr               {$$ = M($1);}
     | unary_expr                {$$ = M($1);}
@@ -201,7 +202,7 @@ binary_expr: expr PLUS expr     {$$ = expr(expr_type::ADD, M($1), M($3));}
            | expr MULT expr     {$$ = expr(expr_type::MUL, M($1), M($3));}
            | expr DIV expr      {$$ = expr(expr_type::DIV, M($1), M($3));}
            | expr EQ expr       {$$ = expr(expr_type::EQ,  M($1), M($3));}
-           | expr NEQ expr      {$$ = expr(expr_type::NEQ, M($1), M($3));}
+           | expr NEQ expr      {$$ = expr(expr_type::EQ,  expr(expr_type::EQ, M($1), M($3)), (int32_t)0);}
            | expr GT expr       {$$ = expr(expr_type::GT,  M($1), M($3));}
            | expr LT expr       {$$ = expr(expr_type::LT,  M($1), M($3));}
            | expr GEQ expr      {$$ = expr(expr_type::GEQ, M($1), M($3));}
@@ -211,7 +212,8 @@ binary_expr: expr PLUS expr     {$$ = expr(expr_type::ADD, M($1), M($3));}
            ;
 
 unary_expr: MINUS expr          {$$ = expr(expr_type::NEG, M($2));}
-          | NOT expr            {$$ = expr(expr_type::EQ,  M($2), 0);}
+          | NOT expr            {$$ = expr(expr_type::EQ,  M($2), (int32_t)0);}
+          | ID L_SQ expr R_SQ   {$$ = expr(expr_type::ID_OFFSET, cmp.UseVar(M($1)), M($3));}
           ;
 
 func_call: ID L_PAR R_PAR       {$$ = expr(expr_type::CALL, cmp.UseFunc($1));}

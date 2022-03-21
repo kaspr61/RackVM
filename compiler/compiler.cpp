@@ -59,9 +59,14 @@ namespace Compiler
 
         std::cout << "Added function \"" << m_currFunction.id << "\":" << std::endl;
 
+        //---- Print everything in the function ----//
         auto it = m_currFunction.statements.begin();
         while (it != m_currFunction.statements.end())
-            std::cout << "--- " << *it++ << std::endl;
+        {
+            std::cout << std::string(4, ' ') << *it << std::endl;
+            it++;
+        }
+        //-----------------------------------------//
 
         m_funcList.push_back(std::move(m_currFunction));
         m_currFunction = {};
@@ -121,10 +126,16 @@ namespace Compiler
 
     std::ostream& operator <<(std::ostream& os, const stmt& s)
     {
+        std::vector<stmt>::const_iterator it;        
+
         switch (s.type)
         {
             case stmt_type::ASSIGNMENT: os << "assign: (" << s.id.dataType << ") " << s.id << 
                 " = expr{" << s.expressions.front() << "}"; 
+                break;
+
+            case stmt_type::ASSIGN_OFFSET: os << "assign: (" << s.id.dataType << ") " << s.id << 
+                "[" << s.expressions.front() << "] = expr{" << s.expressions.back() << "}"; 
                 break;
 
             case stmt_type::DECLARATION: os << "decl: " << s.id.dataType << " " << s.id; 
@@ -137,7 +148,39 @@ namespace Compiler
             case stmt_type::EXPRESSION: os << "expr: " << s.expressions.front(); 
                 break;
 
-            default: os << "Other"; break;
+            case stmt_type::CREATION: os << "create: " << s.expressions.front() << " " << ARRAY_TO_BASE(s.id.dataType) << "s at " << s.id; 
+                break;
+
+            case stmt_type::DESTRUCTION: os << "destroy: " << s.id; 
+                break;
+
+            case stmt_type::BLOCK: 
+                os << '{' << std::endl;
+                it = s.substmts.begin();
+                while (it != s.substmts.end())
+                    os << std::string(8, ' ') << *it++ << std::endl;
+
+                os << std::string(4, ' ') << '}';
+                break;
+
+            case stmt_type::BRANCH: 
+                os << "if: ( " << s.substmts.front().expressions.front() << " )" << std::endl;
+                
+                it = s.substmts.front().substmts.begin();
+                while (it != s.substmts.front().substmts.end())
+                    os << std::string(4, ' ') << *it++ << std::endl;
+
+
+                if (s.substmts.size() == 2) // Has an else statement
+                {
+                    os << std::string(4, ' ') << "else" << std::endl; 
+                    it = s.substmts.back().substmts.begin();
+                    while (it != s.substmts.back().substmts.end())
+                        os << std::string(4, ' ') << *it++;
+                }
+                break;
+
+            default: os << "unknown statement"; break;
         }
 
         return os;
@@ -147,12 +190,17 @@ namespace Compiler
     {
         switch (dataType)
         {
-            case DataType::INT:    os << "int";    break;
-            case DataType::LONG:   os << "long";   break;
-            case DataType::CHAR:   os << "char";   break;
-            case DataType::FLOAT:  os << "float";  break;
-            case DataType::DOUBLE: os << "double"; break;
-            case DataType::STRING: os << "string"; break;
+            case DataType::INT:        os << "int";     break;
+            case DataType::LONG:       os << "long";    break;
+            case DataType::CHAR:       os << "char";    break;
+            case DataType::FLOAT:      os << "float";   break;
+            case DataType::DOUBLE:     os << "double";  break;
+            case DataType::STRING:     os << "string";  break;
+            case DataType::INT_ARR:    os << "int+";    break;
+            case DataType::LONG_ARR:   os << "long+";   break;
+            case DataType::FLOAT_ARR:  os << "float+";  break;
+            case DataType::DOUBLE_ARR: os << "double+"; break;
+            case DataType::STRING_ARR: os << "string+"; break;
             case DataType::UNDEFINED: 
             default: os << "void";
         }
@@ -219,22 +267,24 @@ namespace Compiler
     {
         switch (e.type)
         {
-            case expr_type::ID:     os << e.id;                                                            break;
-            case expr_type::NUMBER: os << (e.dataType == DataType::INT ? e.intValue : e.longValue);        break;
-            case expr_type::ADD:    os << "(" << e.operands.front() << " + " << e.operands.back() << ")";  break;
-            case expr_type::SUB:    os << "(" << e.operands.front() << " - " << e.operands.back() << ")";  break;
-            case expr_type::MUL:    os << "(" << e.operands.front() << " * " << e.operands.back() << ")";  break;
-            case expr_type::DIV:    os << "(" << e.operands.front() << " / " << e.operands.back() << ")";  break;
-            case expr_type::EQ:     os << "(" << e.operands.front() << " == " << e.operands.back() << ")"; break;
-            case expr_type::NEQ:    os << "(" << e.operands.front() << " != " << e.operands.back() << ")"; break;
-            case expr_type::GT:     os << "(" << e.operands.front() << " > " << e.operands.back() << ")";  break;
-            case expr_type::LT:     os << "(" << e.operands.front() << " < " << e.operands.back() << ")";  break;
-            case expr_type::GEQ:    os << "(" << e.operands.front() << " >= " << e.operands.back() << ")"; break;
-            case expr_type::LEQ:    os << "(" << e.operands.front() << " <= " << e.operands.back() << ")"; break;
-            case expr_type::OR:     os << "(" << e.operands.front() << " || " << e.operands.back() << ")"; break;
-            case expr_type::AND:    os << "(" << e.operands.front() << " && " << e.operands.back() << ")"; break;
-            case expr_type::NEG:    os << "(-(" << e.operands.front() << ")";                              break;
-            case expr_type::CALL:   os << e.operands.front().id;                                           break;
+            case expr_type::ID:        os << e.id;                                                            break;
+            case expr_type::ID_OFFSET: os << e.operands.front() << "[" << e.operands.back() << "]";                               break;
+            case expr_type::NUMBER:    os << (e.dataType == DataType::INT ? e.intValue : e.longValue);        break;
+            case expr_type::STRING:    os << '"' << e.strValue << '"';                                        break;
+            case expr_type::ADD:       os << "(" << e.operands.front() << " + " << e.operands.back() << ")";  break;
+            case expr_type::SUB:       os << "(" << e.operands.front() << " - " << e.operands.back() << ")";  break;
+            case expr_type::MUL:       os << "(" << e.operands.front() << " * " << e.operands.back() << ")";  break;
+            case expr_type::DIV:       os << "(" << e.operands.front() << " / " << e.operands.back() << ")";  break;
+            case expr_type::EQ:        os << "(" << e.operands.front() << " == " << e.operands.back() << ")"; break;
+            case expr_type::NEQ:       os << "(" << e.operands.front() << " != " << e.operands.back() << ")"; break;
+            case expr_type::GT:        os << "(" << e.operands.front() << " > " << e.operands.back() << ")";  break;
+            case expr_type::LT:        os << "(" << e.operands.front() << " < " << e.operands.back() << ")";  break;
+            case expr_type::GEQ:       os << "(" << e.operands.front() << " >= " << e.operands.back() << ")"; break;
+            case expr_type::LEQ:       os << "(" << e.operands.front() << " <= " << e.operands.back() << ")"; break;
+            case expr_type::OR:        os << "(" << e.operands.front() << " || " << e.operands.back() << ")"; break;
+            case expr_type::AND:       os << "(" << e.operands.front() << " && " << e.operands.back() << ")"; break;
+            case expr_type::NEG:       os << "(-(" << e.operands.front() << ")";                              break;
+            case expr_type::CALL:      os << e.operands.front().id;                                           break;
 
             default: os << "unknown expr";     break;
         }

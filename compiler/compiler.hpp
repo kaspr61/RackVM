@@ -31,6 +31,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string>
 #include <cstring>
 #include <fstream>
+#include <sstream>
 #include <map>
 #include <vector>
 #include <algorithm>

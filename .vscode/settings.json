@@ -58,6 +58,7 @@
         "*.l": "cpp",
         "map": "cpp",
         "xtree": "cpp",
-        "locale.h": "c"
+        "locale.h": "c",
+        "*.rack": "c"
     }
 }
