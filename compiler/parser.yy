@@ -67,6 +67,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     }
 
     #define M(x) std::move(x)
+    #define TypeCheck(ex) {std::string err = ex.CheckType(); if (err != "") error(cmp.m_location, err);}
+    #define TypeCheckAssign(st) {std::string err = st.CheckAssignmentType(); if (err != "") error(cmp.m_location, err);}
 }
 
 %define api.token.prefix {T_}
@@ -173,13 +175,13 @@ stmts: stmts stmt               {$$ = M($1); $$.push_back(M($2));}
      ;
 
 stmt: data_type ID SEMICOLON                    {$$ = stmt(stmt_type::DECLARATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR));}
-    | ID ASSIGN expr SEMICOLON                  {$$ = stmt(stmt_type::ASSIGNMENT, cmp.UseVar(M($1)), M($3));}
+    | ID ASSIGN expr SEMICOLON                  {$$ = stmt(stmt_type::ASSIGNMENT, cmp.UseVar(M($1)), M($3)); TypeCheckAssign($$);}
     | ID ASSIGN CREATE expr SEMICOLON           {$$ = stmt(stmt_type::CREATION, cmp.UseVar(M($1)), M($4));}
-    | ID L_SQ expr R_SQ ASSIGN expr SEMICOLON   {$$ = stmt(stmt_type::ASSIGN_OFFSET, cmp.UseVar(M($1)), {M($3), M($6)});}
-    | data_type ID ASSIGN expr SEMICOLON        {$$ = stmt(stmt_type::INITIALIZATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR), M($4));}
+    | ID L_SQ expr R_SQ ASSIGN expr SEMICOLON   {$$ = stmt(stmt_type::ASSIGN_OFFSET, cmp.UseVar(M($1)), {M($3), M($6)}); TypeCheckAssign($$);}
+    | data_type ID ASSIGN expr SEMICOLON        {$$ = stmt(stmt_type::INITIALIZATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR), M($4));  TypeCheckAssign($$);}
     | data_type ID ASSIGN CREATE expr SEMICOLON {$$ = stmt(stmt_type::CREATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR), M($5));}
     | DESTROY ID SEMICOLON                      {$$ = stmt(stmt_type::DESTRUCTION, cmp.UseVar(M($2)));}
-    | expr SEMICOLON                            {$$ = stmt(stmt_type::EXPRESSION, M($1));}
+    | func_call SEMICOLON                       {$$ = stmt(stmt_type::FUNC_CALL, M($1));}
     | cond_stmt                                 {$$ = M($1);}
     | {cmp.EnterScope();} L_CURL stmts R_CURL   {$$ = stmt(stmt_type::BLOCK, M($3)); cmp.ExitScope();}
     ;
@@ -192,9 +194,9 @@ expr: ID                        {$$ = expr(cmp.UseVar(M($1)));}
     | number                    {$$ = M($1);}
     | STR                       {$$ = expr(M($1));}
     | L_PAR expr R_PAR          {$$ = M($2);}
-    | binary_expr               {$$ = M($1);}
-    | unary_expr                {$$ = M($1);}
-    | func_call                 {$$ = M($1);}
+    | binary_expr               {$$ = M($1); TypeCheck($$);}
+    | unary_expr                {$$ = M($1); TypeCheck($$);}
+    | func_call                 {$$ = M($1); TypeCheck($$);}
     ;
 
 binary_expr: expr PLUS expr     {$$ = expr(expr_type::ADD, M($1), M($3));}

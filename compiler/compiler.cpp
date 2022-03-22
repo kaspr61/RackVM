@@ -29,9 +29,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 namespace Compiler
 {
-    RackCompiler::RackCompiler() :
+    RackCompiler::RackCompiler(CodeGenerationType codeGenType) :
         m_traceParsing(false),
-        m_currFunction()
+        m_currFunction(),
+        m_codeGenType(codeGenType)
     {
     }
 
@@ -50,7 +51,24 @@ namespace Compiler
         RackParser parser(lexer, *this);
         parser.set_debug_level(m_traceParsing);
         
-        return parser.parse() == 0;
+        int parseResult = parser.parse();
+
+        bool codeGenResult = true;
+        if (m_codeGenType != CodeGenerationType::NONE)
+        {
+            CodeGenerator* codeGenerator;
+            if (m_codeGenType == CodeGenerationType::STACK)
+                codeGenerator = new StackCodeGenerator();
+            else
+                codeGenerator = new RegisterCodeGenerator();
+
+            // Generate the assembly source.
+            codeGenResult = codeGenerator->TranslateFunctions(m_funcList, std::cout);
+
+            delete codeGenerator;
+        }
+
+        return parseResult && codeGenResult;
     }
 
     void RackCompiler::AddFunc(std::vector<stmt>&& statements)
@@ -145,7 +163,7 @@ namespace Compiler
                 " = expr{" << s.expressions.front() << "}"; 
                 break;
 
-            case stmt_type::EXPRESSION: os << "expr: " << s.expressions.front(); 
+            case stmt_type::FUNC_CALL: os << "func_call: " << s.expressions.front(); 
                 break;
 
             case stmt_type::CREATION: os << "create: " << s.expressions.front() << " " << ARRAY_TO_BASE(s.id.dataType) << "s at " << s.id; 
@@ -295,7 +313,7 @@ namespace Compiler
 
 int main(int argc, char* argv[])
 {
-    Compiler::RackCompiler compiler;
+    Compiler::RackCompiler compiler(Compiler::RackCompiler::CodeGenerationType::STACK);
 
     if (argc < 2)
     {

@@ -31,7 +31,8 @@ target_include_directories(${TARGET_COMPILER} PRIVATE
 
 target_sources(${TARGET_COMPILER}
     PRIVATE
-        compiler.cpp    compiler.hpp
+        compiler.cpp        compiler.hpp
+        code_generator.cpp  code_generator.hpp
         lexer.hpp
         types.hpp
         ${BISON_RackParser_OUTPUTS}

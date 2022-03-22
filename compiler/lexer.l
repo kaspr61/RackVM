@@ -47,6 +47,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
     Compiler::RackParser::symbol_type
     make_STR_LIT (const std::string &s, const Compiler::RackParser::location_type& loc);
+
+    void multiln_comment_add_lines(char* str, Compiler::RackParser::location_type& loc);
+
 %}
 
 id          [a-zA-Z][a-zA-Z_0-9]*
@@ -69,8 +72,8 @@ blank       [ \t\r]
 %}
 
 "//"[^\n]*           { /* Ignore single-line comment */ }
-[/][*][^*]*[*]+([^*/][^*]*[*]+)*[/]  { /* Ignore multi-line comment */ }
-[/][*]               return Compiler::RackParser::make_YYEOF (loc);
+[/][*][^*]*[*]+([^*/][^*]*[*]+)*[/]  { /* Ignore multi-line comment */ multiln_comment_add_lines(yytext, loc); }
+[/][*]               return Compiler::RackParser::make_YYEOF(loc);
 
 {blank}+    loc.step();
 \n+         loc.lines(yyleng); loc.step();
@@ -141,4 +144,11 @@ Compiler::RackParser::symbol_type
 make_STR_LIT (const std::string &s, const Compiler::RackParser::location_type& loc)
 {
     return Compiler::RackParser::make_STR(s.substr(1, s.length()-2), loc);
+}
+
+void multiln_comment_add_lines(char* str, Compiler::RackParser::location_type& loc)
+{
+    std::string s(str);
+    auto count = std::count(s.begin(), s.end(), '\n');
+    loc.lines(count);
 }

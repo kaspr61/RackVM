@@ -15,24 +15,7 @@ long len(string s)
 
 int test()
 {
-    int a = 5;
-    string s = "Hello, world!";
-
-    if (a is not 5) {
-        a = 10;
-    }
-    else {
-        a = s;
-        a = a * 4;        
-    }
-
-    int size = 5;
-    int+ numbers = create 10;
-
-    // print "\"%s\" (%d characters)", s, len(s);
-
-    numbers[0] = numbers[1];
-    a = numbers[a];
-
-    destroy numbers;
+    int a = 250 + 7 * (4 + test() / 30);
+    int+ list = create 1;
+    list[0] = 10;
 }

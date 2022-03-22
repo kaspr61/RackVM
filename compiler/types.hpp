@@ -33,6 +33,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <list>
 #include <ostream>
 #include <map>
+#include <sstream>
 
 #define ARRAY_TO_BASE(x) (::Compiler::g_arrToBaseType[x])
 
@@ -59,6 +60,17 @@ namespace Compiler
 
     extern std::ostream& operator <<(std::ostream& os, const DataType& dataType);
 
+    inline std::string Msg_ConflictingDataType(DataType lhs, DataType rhs)
+    {
+        return (std::stringstream() << "Conflicting data types: " << lhs << 
+                " <--> " << rhs).str();
+    }
+
+    inline std::string Msg_ArrayIndexNonInteger(DataType indexDataType)
+    {
+        return (std::stringstream() << "Array index must be an integer: was " << indexDataType).str();
+    }
+
     static std::map<DataType, DataType> g_arrToBaseType = {
         std::make_pair(DataType::INT_ARR, DataType::INT),
         std::make_pair(DataType::LONG_ARR, DataType::LONG),
@@ -74,7 +86,7 @@ namespace Compiler
         ASSIGNMENT,
         ASSIGN_OFFSET,
         INITIALIZATION,
-        EXPRESSION,
+        FUNC_CALL,
         BRANCH,     // Contains multiple 1 or more block statements.
         BLOCK,      // A block of statements, used for branching.
         CREATION,
@@ -163,20 +175,83 @@ namespace Compiler
             type(type), 
             dataType(DataType::UNDEFINED), 
             operands{std::forward<T>(args)...} 
-            {}
+        {
+        }
 
-        expr(const identifier& value) : type(expr_type::ID), dataType(DataType::UNDEFINED), id(value) {}
-        expr(identifier&& value) : type(expr_type::ID), dataType(DataType::UNDEFINED), id(std::move(value)) {}
-        expr(int32_t value) : type(expr_type::NUMBER), dataType(DataType::INT), intValue(value) {}
-        expr(int64_t value) : type(expr_type::NUMBER), dataType(DataType::LONG), longValue(value) {}
-        expr(std::string&& value) : type(expr_type::STRING), dataType(DataType::STRING), strValue(std::move(value)) {}
+        expr(const identifier& value) : 
+            type(expr_type::ID), 
+            dataType(value.dataType), 
+            id(value) 
+        {
+        }
+
+        expr(identifier&& value) : 
+            type(expr_type::ID), 
+            dataType(value.dataType), 
+            id(std::move(value)) 
+        {
+        }
+
+        expr(int32_t value) : 
+            type(expr_type::NUMBER), 
+            dataType(DataType::INT), 
+            intValue(value) 
+        {
+        }
+        
+        expr(int64_t value) : 
+            type(expr_type::NUMBER), 
+            dataType(DataType::LONG), 
+            longValue(value) 
+        {
+        }
+
+        expr(std::string&& value) : 
+            type(expr_type::STRING), 
+            dataType(DataType::STRING), 
+            strValue(std::move(value)) 
+        {
+        }
 
         expr(const func& value) : 
             type(expr_type::ID), 
             dataType(DataType::UNDEFINED), 
             id(value.id), 
             function(&value) 
-            {}
+        {
+        }
+
+        std::string CheckType()
+        {
+            if (operands.size() < 1)
+                return "";
+
+            //---- Detect type for unary expression ----//
+
+            expr& lhs = operands.front();
+            if (dataType == DataType::UNDEFINED)
+                dataType = lhs.dataType;
+
+            if (operands.size() < 2)
+                return "";
+
+            expr& rhs = operands.back();
+
+            // Special case check for array indexing, that index is an integer.
+            if (type == expr_type::ID_OFFSET)
+            {
+                if (rhs.dataType != DataType::INT && rhs.dataType != DataType::LONG)
+                    return Msg_ArrayIndexNonInteger(rhs.dataType);
+                return "";
+            }
+
+            //---- Detect type for binary expression ----//
+
+            if (lhs.dataType != rhs.dataType)
+                return Msg_ConflictingDataType(lhs.dataType, rhs.dataType);
+
+            return "";
+        }
 
         friend std::ostream& operator <<(std::ostream& os, const expr& s);
     };
@@ -212,12 +287,13 @@ namespace Compiler
         }
 
         // For variable assignment / initialization.
-        stmt(stmt_type type, const identifier& id, expr&& expr) :
+        stmt(stmt_type type, const identifier& id, expr&& exp) :
             type(type), 
             id(id),
-            expressions({std::move(expr)}),
+            expressions({std::move(exp)}),
             substmts()
         {
+            CheckAssignmentType();
         }
 
         // For indexed variable assignment, eg. numbers[5] = ...
@@ -242,6 +318,30 @@ namespace Compiler
             type(type),
             substmts(stmts)
         {
+        }
+
+        std::string CheckAssignmentType()
+        {
+            if (type == stmt_type::ASSIGNMENT || type == stmt_type::INITIALIZATION)
+            {
+                expr& value = expressions.front();
+                if (value.dataType != id.dataType)
+                    return Msg_ConflictingDataType(id.dataType, value.dataType);
+            }
+            else if (type == stmt_type::ASSIGN_OFFSET)
+            {
+                expr& index = expressions.front();
+                expr& value = expressions.back();
+                DataType arrType = ARRAY_TO_BASE(id.dataType);
+
+                if (index.dataType != DataType::INT && index.dataType != DataType::LONG)
+                    return Msg_ArrayIndexNonInteger(index.dataType);
+
+                if (value.dataType != arrType)
+                    return Msg_ConflictingDataType(arrType, value.dataType);
+            }
+
+            return "";
         }
 
         friend std::ostream& operator <<(std::ostream& os, const stmt& s);

@@ -38,14 +38,24 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "parser.hpp"
 #include "lexer.hpp"
+#include "code_generator.hpp"
 
 namespace Compiler
 {
     class RackCompiler
     {
+    public:
+        enum class CodeGenerationType
+        {
+            NONE,
+            STACK,
+            REGISTER
+        };
+
     private:
         using ScopedVars = std::map<std::string, identifier>;
 
+        CodeGenerationType m_codeGenType;
         std::vector<func> m_funcList;
         std::vector<ScopedVars> m_scopes;
         func m_currFunction;
@@ -57,8 +67,10 @@ namespace Compiler
         Compiler::location m_location;
 
     public:
-        RackCompiler();
+        RackCompiler() = delete;
         ~RackCompiler();
+
+        RackCompiler(CodeGenerationType codeGenType);
 
         int Parse(const std::string& file);
 
