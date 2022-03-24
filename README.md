@@ -16,7 +16,7 @@ The repository contains:
 
 
 # Build
-This project uses CMake. If you want to compile the compiler, you should have at least Bison 3.8.2, and Flex installed. It might work on earlier versions, but it hasn't been tested.
+This project uses CMake. If you want to compile the compiler, you should have at least Bison 3.8.2, and Flex 2.6.4 installed. It might very well work on earlier versions, but it hasn't been tested.
 
 You may choose to generate it however you want, but I use the "MSYS Makefiles" generator (on Windows 10), like this:
 ```bash
