@@ -1,0 +1,15 @@
+int add(int l, int r)
+{
+    int result = l + r;
+    return result;
+}
+
+do_stuff()
+{
+}
+
+main()
+{
+    int sum = add(5, 2);
+    do_stuff();
+}
