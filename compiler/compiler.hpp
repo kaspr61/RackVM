@@ -55,6 +55,7 @@ namespace Compiler
     private:
         using ScopedVars = std::map<std::string, identifier>;
 
+        RackParser* m_parser;
         CodeGenerationType m_codeGenType;
         std::vector<func> m_funcList;
         std::vector<ScopedVars> m_scopes;
@@ -75,13 +76,17 @@ namespace Compiler
         int Parse(const std::string& file);
 
         void  AddFunc(std::vector<stmt>&& statements);
-        void  DeclFunc(DataType dataType, std::string&& id);
+        void  DeclFunc(DataType dataType, std::string&& id, std::vector<stmt>&& args);
         const identifier& DeclVar(DataType dataType, std::string&& varId, identifier_type idType);
         const identifier& UseVar(std::string&& varId) const;
-        const func& UseFunc(const std::string& funcId) const;
+        const func& UseFunc(const std::string& funcId, const std::list<expr>& args) const;
+        std::string CheckReturnType(const stmt& retStmt) const;
         
         inline void EnterScope() { m_scopes.emplace_back(); }
         inline void ExitScope()  { m_scopes.pop_back(); }
+
+    private:
+        bool MatchFunctionArgs(const func& fun, const std::list<expr>& args) const;
 
     };
 }

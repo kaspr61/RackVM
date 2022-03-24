@@ -66,6 +66,7 @@ namespace Compiler
         virtual std::string stmt_branch(const stmt& s, std::ostream& output) = 0;
         virtual std::string stmt_creation(const stmt& s, std::ostream& output) = 0;
         virtual std::string stmt_destruction(const stmt& s, std::ostream& output) = 0;
+        virtual std::string stmt_return(const stmt& s, std::ostream& output) = 0;
 
         virtual std::string expr_id(const expr& e, std::ostream& output) = 0;
         virtual std::string expr_literal(const expr& e, std::ostream& output) = 0;
@@ -98,6 +99,7 @@ namespace Compiler
         virtual std::string stmt_branch(const stmt& s, std::ostream& output);
         virtual std::string stmt_creation(const stmt& s, std::ostream& output);
         virtual std::string stmt_destruction(const stmt& s, std::ostream& output);
+        virtual std::string stmt_return(const stmt& s, std::ostream& output);
 
         virtual std::string expr_id(const expr& e, std::ostream& output);
         virtual std::string expr_literal(const expr& e, std::ostream& output);
@@ -116,6 +118,7 @@ namespace Compiler
         virtual std::string stmt_branch(const stmt& s, std::ostream& output);
         virtual std::string stmt_creation(const stmt& s, std::ostream& output);
         virtual std::string stmt_destruction(const stmt& s, std::ostream& output);
+        virtual std::string stmt_return(const stmt& s, std::ostream& output);
 
         virtual std::string expr_id(const expr& e, std::ostream& output);
         virtual std::string expr_literal(const expr& e, std::ostream& output);

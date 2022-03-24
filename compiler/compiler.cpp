@@ -29,6 +29,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 namespace Compiler
 {
+    ////======== COMPILER IMPLEMENTATION ========////
+
     RackCompiler::RackCompiler(CodeGenerationType codeGenType) :
         m_traceParsing(false),
         m_currFunction(),
@@ -48,10 +50,13 @@ namespace Compiler
         std::ifstream inStream(file);
 
         RackLexer lexer(*this, &inStream);
-        RackParser parser(lexer, *this);
-        parser.set_debug_level(m_traceParsing);
+
+        m_parser = new RackParser(lexer, *this);
+        m_parser->set_debug_level(m_traceParsing);
         
-        int parseResult = parser.parse();
+        int parseResult = m_parser->parse();
+
+        delete m_parser;
 
         bool codeGenResult = true;
         if (m_codeGenType != CodeGenerationType::NONE)
@@ -73,28 +78,40 @@ namespace Compiler
 
     void RackCompiler::AddFunc(std::vector<stmt>&& statements)
     {
-        m_currFunction.statements = std::move(statements);
-
         std::cout << "Added function \"" << m_currFunction.id << "\":" << std::endl;
 
-        //---- Print everything in the function ----//
-        auto it = m_currFunction.statements.begin();
-        while (it != m_currFunction.statements.end())
+        auto it = statements.begin();
+        while (it != statements.end())
         {
+            // Print the statement.
             std::cout << std::string(4, ' ') << *it << std::endl;
             it++;
         }
-        //-----------------------------------------//
 
+        const stmt& lastStmt = statements.back();
+        // If function data type is void.
+        if (m_currFunction.returnType == DataType::UNDEFINED)
+        {
+            if (statements.size() == 0 || lastStmt.type != stmt_type::RETURN)
+                statements.push_back(stmt(stmt_type::RETURN));
+        }
+        else
+        {
+            if (statements.size() == 0 || lastStmt.type != stmt_type::RETURN)
+                m_parser->error(m_location, "Function must return a value.");
+        }
+
+        m_currFunction.statements = std::move(statements);
         m_funcList.push_back(std::move(m_currFunction));
         m_currFunction = {};
     }
 
-    void RackCompiler::DeclFunc(DataType dataType, std::string&& id)
+    void RackCompiler::DeclFunc(DataType dataType, std::string&& id, std::vector<stmt>&& args)
     {
         func& fun = m_currFunction;
         fun.id = identifier(identifier_type::FUNC_NAME, std::move(id), 0, dataType);
         fun.returnType = dataType;
+        fun.args = std::move(args);
     }
 
     const identifier& RackCompiler::DeclVar(DataType dataType, std::string&& varId, identifier_type idType)
@@ -102,8 +119,12 @@ namespace Compiler
         if (m_scopes.empty())
             throw RackParser::syntax_error(m_location, "Variables may not be declared in global scope.");
         
+        size_t* varCount = &m_currFunction.localVarCnt;
+        if (idType == identifier_type::ARG_VAR)
+            varCount = &m_currFunction.argVarCnt;
+
         auto result = m_scopes.back().emplace(varId, 
-            identifier(idType, varId, m_currFunction.localVarCnt++, dataType));
+            identifier(idType, varId, (*varCount)++, dataType));
             
         if (!result.second)
             throw RackParser::syntax_error(m_location, "\""+varId+"\" has already been defined.");
@@ -125,11 +146,19 @@ namespace Compiler
         throw RackParser::syntax_error(m_location, "Unknown identifier \""+varId+"\".");
     }
 
-    const func& RackCompiler::UseFunc(const std::string& funcId) const
+    const func& RackCompiler::UseFunc(const std::string& funcId, const std::list<expr>& args) const
     {
         const func* function;
+        bool funcIdFound = false;
         auto it = std::find_if(m_funcList.begin(), m_funcList.end(),
-            [=](const func& e) { return e.id.id == funcId; });
+            [&](const func& f) 
+            {
+                if (f.id.id != funcId)
+                    return false;
+
+                funcIdFound = true;
+                return MatchFunctionArgs(f, args);
+            });
          
         if (it != m_funcList.end())
             function = &*it;
@@ -137,10 +166,44 @@ namespace Compiler
             function = &m_currFunction;
 
         if (function == nullptr || function->id.id != funcId)
-            throw RackParser::syntax_error(m_location, "Unknown function \""+funcId+"\".");
+        {
+            if (!funcIdFound)
+                throw RackParser::syntax_error(m_location, "Couldn't find function \""+funcId+"\".");
+            else
+                throw RackParser::syntax_error(m_location, "Function arguments did not match declaration for \""+funcId+"\".");
+        }
 
         return *function;
     }
+
+    std::string RackCompiler::CheckReturnType(const stmt& retStmt) const
+    {
+        if (retStmt.expressions.size() == 0)
+            return "";
+
+        DataType valueRetType = retStmt.expressions.front().dataType;
+        DataType funcRetType = m_currFunction.returnType;
+        if (valueRetType != funcRetType)
+            return (std::stringstream() << "Return value does not match function declaration: " << valueRetType << 
+                    ", expects " << funcRetType).str();
+
+        return "";
+    }
+
+    bool RackCompiler::MatchFunctionArgs(const func& fun, const std::list<expr>& args) const
+    {   
+        if (fun.args.size() != args.size())
+            return false;
+
+        for (auto l : fun.args)
+            for (auto r : args)
+                if (l.id.dataType != r.dataType)
+                    return false;
+
+        return true;
+    }
+
+    ////======== END OF COMPILER IMPLEMENTATION ========////
 
     std::ostream& operator <<(std::ostream& os, const stmt& s)
     {
@@ -170,6 +233,13 @@ namespace Compiler
                 break;
 
             case stmt_type::DESTRUCTION: os << "destroy: " << s.id; 
+                break;
+
+            case stmt_type::RETURN: 
+                if (s.expressions.size() == 0)
+                    os << "return"; 
+                else
+                    os << "return: expr{" << s.expressions.front() << "}"; 
                 break;
 
             case stmt_type::BLOCK: 
@@ -258,7 +328,7 @@ namespace Compiler
         switch (id)
         {
             case identifier_type::LOCAL_VAR: os << "L";         break;
-            case identifier_type::PARAM_VAR: os << "P";         break;
+            case identifier_type::ARG_VAR:   os << "A";         break;
             case identifier_type::FUNC_NAME: os << "function";  break;
 
             default: os << "unknown identifier_type";     break;
@@ -272,8 +342,8 @@ namespace Compiler
         switch (id.type)
         {
             case identifier_type::LOCAL_VAR:
-            case identifier_type::PARAM_VAR: os << id.id << "<" << id.type << id.position << ">"; break;
-            case identifier_type::FUNC_NAME: os << id.id << "<" << id.dataType << ">()"; break;
+            case identifier_type::ARG_VAR: os << id.id << "<" << id.type << id.position << ">"; break;
+            case identifier_type::FUNC_NAME: os << id.id << "<" << id.dataType << ">"; break;
 
             default: os << "unknown identifier \" " << id.id << "\"";     break;
         }
@@ -302,12 +372,33 @@ namespace Compiler
             case expr_type::OR:        os << "(" << e.operands.front() << " || " << e.operands.back() << ")"; break;
             case expr_type::AND:       os << "(" << e.operands.front() << " && " << e.operands.back() << ")"; break;
             case expr_type::NEG:       os << "(-(" << e.operands.front() << ")";                              break;
-            case expr_type::CALL:      os << e.operands.front().id;                                           break;
+            case expr_type::CALL:      os << e.operands.front().id << '(' << 
+                                             BuildCommaListString(e.operands.back().operands) << ')';       break;
 
             default: os << "unknown expr";     break;
         }
 
         return os;
+    }
+
+    int GetDataTypeWords(DataType dataType)
+    {
+        switch (dataType)
+        {
+            case DataType::INT:
+            case DataType::CHAR:
+            case DataType::FLOAT:
+            case DataType::STRING:
+            case DataType::INT_ARR:
+            case DataType::LONG_ARR:
+            case DataType::FLOAT_ARR:
+            case DataType::DOUBLE_ARR:
+            case DataType::STRING_ARR: return 1;
+            case DataType::LONG:
+            case DataType::DOUBLE:     return 2;
+        }
+
+        return 0;
     }
 }
 

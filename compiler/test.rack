@@ -1,11 +1,30 @@
-b = 10;
-a = 5 + 13 * (func() < (b is not 15));
-func();
-
-if (a equals b or (not c and a is below b) and b is above c)
+/*
+long len(string s)
 {
-    if (not (func() is above 0))
-        func();
-        
-    a = b + 15;
+    long i = 0;
+    char ch = s[0];
+    while (ch is not 0)
+    {
+        ch = s[i];
+        i = i + 1;
+    }
+
+    return i;
+}
+*/
+
+int add(int l, int r)
+{
+    int result = l + r;
+    return result;
+}
+
+do_stuff()
+{
+}
+
+main()
+{
+    int sum = add(5, 2);
+    do_stuff();
 }

@@ -69,6 +69,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     #define M(x) std::move(x)
     #define TypeCheck(ex) {std::string err = ex.CheckType(); if (err != "") error(cmp.m_location, err);}
     #define TypeCheckAssign(st) {std::string err = st.CheckAssignmentType(); if (err != "") error(cmp.m_location, err);}
+    #define TypeCheckReturn(st) {std::string err = cmp.CheckReturnType(st); if (err != "") error(cmp.m_location, err);}
 }
 
 %define api.token.prefix {T_}
@@ -96,6 +97,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     L_SQ      "["
     R_SQ      "]"
     SEMICOLON ";"
+    COMMA     ","
     ;
 
  /* Keywords */
@@ -111,6 +113,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     STRING  "string"
     CREATE  "create"
     DESTROY "destroy"
+    RETURN  "return"
 
  /* Dynamic tokens */
 %token<std::string> ID          "id"
@@ -120,8 +123,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
  /* Rules with types */
 %type<func> func
-%type<std::vector<stmt>> stmts
-%type<stmt> stmt cond_stmt
+%type<std::vector<stmt>> stmts args_comma func_args
+%type<stmt> stmt cond_stmt arg_decl
+%type<std::list<expr>> expr_list_1 expr_list_0
 %type<expr> expr number func_call binary_expr unary_expr
 %type<DataType> data_type
 
@@ -151,23 +155,42 @@ data_type: INT                  {$$ = DataType::INT;}
          | FLOAT                {$$ = DataType::FLOAT;}
          | DOUBLE               {$$ = DataType::DOUBLE;}
          | STRING               {$$ = DataType::STRING;}
-         | INT PLUS             {$$ = DataType::INT_ARR;}
-         | LONG PLUS            {$$ = DataType::LONG_ARR;}
-         | FLOAT PLUS           {$$ = DataType::FLOAT_ARR;}
-         | DOUBLE PLUS          {$$ = DataType::DOUBLE_ARR;}
-         | STRING PLUS          {$$ = DataType::STRING_ARR;}
+         | INT L_SQ R_SQ        {$$ = DataType::INT_ARR;}
+         | LONG L_SQ R_SQ       {$$ = DataType::LONG_ARR;}
+         | FLOAT L_SQ R_SQ      {$$ = DataType::FLOAT_ARR;}
+         | DOUBLE L_SQ R_SQ     {$$ = DataType::DOUBLE_ARR;}
+         | STRING L_SQ R_SQ     {$$ = DataType::STRING_ARR;}
          ;
 
 number: NUM_INT                 {$$ = expr($1);}
       | NUM_LONG                {$$ = expr($1);}
       ;
 
+arg_decl: data_type ID          {$$ = stmt(stmt_type::DECLARATION, cmp.DeclVar($1, M($2), identifier_type::ARG_VAR));}
+        ;
+
+args_comma: args_comma COMMA arg_decl   {$$ = M($1); $$.push_back(M($3));}
+          | arg_decl                    {$$.push_back(M($1));}
+          ;
+
+func_args: args_comma           {$$ = M($1);}
+         | %empty               {}
+         ;
+
+expr_list_1: expr_list_1 COMMA expr     {$$ = M($1); $$.push_back(M($3));}
+           | expr                       {$$.push_back(M($1));}
+           ;
+
+expr_list_0: expr_list_1        {$$ = M($1);}
+           | %empty             {}
+           ;
+
 funcs: funcs func               {cmp.ExitScope();}
      | func                     {cmp.ExitScope();}
      ;
 
-func: {cmp.EnterScope();} ID L_PAR R_PAR L_CURL {cmp.DeclFunc(DataType::UNDEFINED, M($2));} stmts R_CURL {cmp.AddFunc(M($7));}
-    | {cmp.EnterScope();} data_type ID L_PAR R_PAR L_CURL {cmp.DeclFunc($2, M($3));} stmts R_CURL        {cmp.AddFunc(M($8));}
+func: {cmp.EnterScope();} ID L_PAR func_args R_PAR L_CURL {cmp.DeclFunc(DataType::UNDEFINED, M($2), M($4));} stmts R_CURL {cmp.AddFunc(M($8));}
+    | {cmp.EnterScope();} data_type ID L_PAR func_args R_PAR L_CURL {cmp.DeclFunc($2, M($3), M($5));} stmts R_CURL        {cmp.AddFunc(M($9));}
     ;
 
 stmts: stmts stmt               {$$ = M($1); $$.push_back(M($2));}
@@ -181,6 +204,8 @@ stmt: data_type ID SEMICOLON                    {$$ = stmt(stmt_type::DECLARATIO
     | data_type ID ASSIGN expr SEMICOLON        {$$ = stmt(stmt_type::INITIALIZATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR), M($4));  TypeCheckAssign($$);}
     | data_type ID ASSIGN CREATE expr SEMICOLON {$$ = stmt(stmt_type::CREATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR), M($5));}
     | DESTROY ID SEMICOLON                      {$$ = stmt(stmt_type::DESTRUCTION, cmp.UseVar(M($2)));}
+    | RETURN expr SEMICOLON                     {$$ = stmt(stmt_type::RETURN, M($2)); TypeCheckReturn($$);}
+    | RETURN SEMICOLON                          {$$ = stmt(stmt_type::RETURN); TypeCheckReturn($$);}
     | func_call SEMICOLON                       {$$ = stmt(stmt_type::FUNC_CALL, M($1));}
     | cond_stmt                                 {$$ = M($1);}
     | {cmp.EnterScope();} L_CURL stmts R_CURL   {$$ = stmt(stmt_type::BLOCK, M($3)); cmp.ExitScope();}
@@ -218,7 +243,7 @@ unary_expr: MINUS expr          {$$ = expr(expr_type::NEG, M($2));}
           | ID L_SQ expr R_SQ   {$$ = expr(expr_type::ID_OFFSET, cmp.UseVar(M($1)), M($3));}
           ;
 
-func_call: ID L_PAR R_PAR       {$$ = expr(expr_type::CALL, cmp.UseFunc($1));}
+func_call: ID L_PAR expr_list_0 R_PAR   {$$ = expr(expr_type::CALL, cmp.UseFunc($1, $3), expr($3));}
          ;
 
 %%

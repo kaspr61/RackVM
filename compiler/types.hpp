@@ -60,6 +60,9 @@ namespace Compiler
 
     extern std::ostream& operator <<(std::ostream& os, const DataType& dataType);
 
+    // Returns the size of dataType in words (4 bytes each).
+    extern int GetDataTypeWords(DataType dataType);
+
     inline std::string Msg_ConflictingDataType(DataType lhs, DataType rhs)
     {
         return (std::stringstream() << "Conflicting data types: " << lhs << 
@@ -69,6 +72,23 @@ namespace Compiler
     inline std::string Msg_ArrayIndexNonInteger(DataType indexDataType)
     {
         return (std::stringstream() << "Array index must be an integer: was " << indexDataType).str();
+    }
+
+    template<typename _Iterable>
+    inline std::string BuildCommaListString(const _Iterable& list)
+    {
+        std::stringstream ss;
+        typename _Iterable::const_iterator it = list.begin();
+        while (true)
+        {
+            ss << *it++;
+            if (it != list.end())
+                ss << ", ";
+            else
+                break;
+        }
+
+        return ss.str();
     }
 
     static std::map<DataType, DataType> g_arrToBaseType = {
@@ -90,7 +110,8 @@ namespace Compiler
         BRANCH,     // Contains multiple 1 or more block statements.
         BLOCK,      // A block of statements, used for branching.
         CREATION,
-        DESTRUCTION
+        DESTRUCTION,
+        RETURN
     };
 
     enum class expr_type
@@ -112,7 +133,8 @@ namespace Compiler
         OR, 
         AND,
         NEG,
-        CALL
+        CALL,
+        EXPR_LIST
     };
 
     extern std::ostream& operator <<(std::ostream& os, const expr_type& e);
@@ -121,7 +143,7 @@ namespace Compiler
     {
         UNDEFINED,
         LOCAL_VAR,
-        PARAM_VAR,
+        ARG_VAR,
         FUNC_NAME
     };
 
@@ -147,10 +169,12 @@ namespace Compiler
 
     struct func
     {
-        DataType           returnType;
         identifier         id;
-        std::vector<stmt>  statements;
+        DataType           returnType;
         size_t             localVarCnt;
+        size_t             argVarCnt;
+        std::vector<stmt>  statements;
+        std::vector<stmt>  args;
     };
 
     struct expr
@@ -175,6 +199,13 @@ namespace Compiler
             type(type), 
             dataType(DataType::UNDEFINED), 
             operands{std::forward<T>(args)...} 
+        {
+        }
+
+        expr(const std::list<expr>& list) :
+            type(expr_type::EXPR_LIST),
+            dataType(DataType::UNDEFINED), 
+            operands(list)
         {
         }
 
@@ -215,7 +246,7 @@ namespace Compiler
 
         expr(const func& value) : 
             type(expr_type::ID), 
-            dataType(DataType::UNDEFINED), 
+            dataType(value.returnType), 
             id(value.id), 
             function(&value) 
         {
@@ -237,11 +268,16 @@ namespace Compiler
 
             expr& rhs = operands.back();
 
+            // Should not proceed if it's a function call.
+            if (type == expr_type::CALL)
+                return "";
+
             // Special case check for array indexing, that index is an integer.
             if (type == expr_type::ID_OFFSET)
             {
                 if (rhs.dataType != DataType::INT && rhs.dataType != DataType::LONG)
                     return Msg_ArrayIndexNonInteger(rhs.dataType);
+
                 return "";
             }
 
@@ -271,8 +307,17 @@ namespace Compiler
         {
         }
 
+        stmt(stmt_type type) : 
+            type(type),
+            id(),
+            expressions(),
+            substmts()
+        {
+        }
+
         stmt(stmt_type type, expr&& expr) : 
             type(type),
+            id(),
             expressions({std::move(expr)}),
             substmts()
         {
@@ -282,6 +327,7 @@ namespace Compiler
         stmt(stmt_type type, const identifier& id) :
             type(type),
             id(id),
+            expressions(),
             substmts()
         {
         }
@@ -308,6 +354,7 @@ namespace Compiler
         // For if-statements
         stmt(stmt_type type, expr&& cond_expr, std::vector<stmt>&& stmts) : 
             type(type),
+            id(),
             expressions({std::move(cond_expr)}),
             substmts(stmts)
         {
@@ -316,6 +363,8 @@ namespace Compiler
         // For block-statements.
         stmt(stmt_type type, std::vector<stmt>&& stmts) : 
             type(type),
+            id(),
+            expressions(),
             substmts(stmts)
         {
         }
@@ -324,14 +373,18 @@ namespace Compiler
         {
             if (type == stmt_type::ASSIGNMENT || type == stmt_type::INITIALIZATION)
             {
-                expr& value = expressions.front();
-                if (value.dataType != id.dataType)
+                const expr& value = expressions.front();
+                DataType valueDataType = value.dataType;
+                if (value.operands.front().type == expr_type::ID)
+                    valueDataType = value.operands.front().dataType;
+
+                if (valueDataType != id.dataType)
                     return Msg_ConflictingDataType(id.dataType, value.dataType);
             }
             else if (type == stmt_type::ASSIGN_OFFSET)
             {
-                expr& index = expressions.front();
-                expr& value = expressions.back();
+                const expr& index = expressions.front();
+                const expr& value = expressions.back();
                 DataType arrType = ARRAY_TO_BASE(id.dataType);
 
                 if (index.dataType != DataType::INT && index.dataType != DataType::LONG)

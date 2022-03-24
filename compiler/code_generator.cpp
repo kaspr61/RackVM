@@ -29,7 +29,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define STR(x) std::to_string(x)
 #define MOV(x) std::move(x)
-#define RETURN_ERROR() {m_hasError = true; return std::string("error: ").append(__FUNCTION__);}
+#define RETURN_ERROR() {m_hasError = true; return std::string("error -> ").append(__FUNCTION__);}
 
 namespace Compiler
 {
@@ -48,6 +48,20 @@ namespace Compiler
         {
             output << funcIt->id.id << ':' << std::endl;
 
+            if (funcIt->argVarCnt > 0)
+            {
+                // First, load up the argument variable values, which are consumed from the stack.
+                // It is important to load them in a reversed order, because... stack.
+                for (auto argIt = funcIt->args.rbegin(); argIt != funcIt->args.rend(); ++argIt)
+                {
+                    if (GetDataTypeWords(argIt->id.dataType) == 2)
+                        output << BuildAsm({"STA.64", STR(argIt->id.position)}) << std::endl;
+                    else
+                        output << BuildAsm({"STA", STR(argIt->id.position)}) << std::endl;
+                }
+            }
+
+            // Translate the contained statements of the function.
             auto stmtIt = funcIt->statements.begin();
             while (stmtIt != funcIt->statements.end())
                 TranslateStatement(*stmtIt++, output);
@@ -71,7 +85,7 @@ namespace Compiler
             case stmt_type::INITIALIZATION: output << stmt_initialization(s, output) << std::endl;
                 break;
 
-            case stmt_type::FUNC_CALL: output << stmt_func_call(s, output) << std::endl;
+            case stmt_type::FUNC_CALL: stmt_func_call(s, output);
                 break;
 
             case stmt_type::BRANCH: output << stmt_branch(s, output) << std::endl;
@@ -87,6 +101,9 @@ namespace Compiler
                 break;
 
             case stmt_type::DESTRUCTION: output << stmt_destruction(s, output) << std::endl;
+                break;
+
+            case stmt_type::RETURN: output << stmt_return(s, output) << std::endl;
                 break;
 
             default: break;
@@ -111,6 +128,9 @@ namespace Compiler
             case expr_type::SUB:
             case expr_type::MUL:
             case expr_type::DIV: output << expr_arithmetic(e, output) << std::endl;
+                break;
+
+            case expr_type::CALL: output << expr_func_call(e, output) << std::endl;
                 break;
         }
 
@@ -142,9 +162,9 @@ namespace Compiler
         TranslateExpression(s.expressions.front(), output);
 
         if (s.id.type == identifier_type::LOCAL_VAR)
-            return BuildAsm({"LDL", STR(s.id.position)});
-        else if (s.id.type == identifier_type::PARAM_VAR)
-            return BuildAsm({"LDP", STR(s.id.position)});
+            return BuildAsm({"STL", STR(s.id.position)});
+        else if (s.id.type == identifier_type::ARG_VAR)
+            return BuildAsm({"STA", STR(s.id.position)});
 
         RETURN_ERROR();
     }
@@ -154,16 +174,18 @@ namespace Compiler
         TranslateExpression(s.expressions.front(), output);
 
         if (s.id.type == identifier_type::LOCAL_VAR)
-            return BuildAsm({"LDL", STR(s.id.position)});
-        else if (s.id.type == identifier_type::PARAM_VAR)
-            return BuildAsm({"LDP", STR(s.id.position)});
+            return BuildAsm({"STL", STR(s.id.position)});
+        else if (s.id.type == identifier_type::ARG_VAR)
+            return BuildAsm({"STA", STR(s.id.position)});
 
         RETURN_ERROR();
     }
 
     std::string StackCodeGenerator::stmt_func_call(const stmt& s, std::ostream& output)
     {
-        RETURN_ERROR();
+        TranslateExpression(s.expressions.front(), output);
+
+        return "";
     }
 
     std::string StackCodeGenerator::stmt_branch(const stmt& s, std::ostream& output)
@@ -181,10 +203,30 @@ namespace Compiler
         RETURN_ERROR();
     }
 
+    std::string StackCodeGenerator::stmt_return(const stmt& s, std::ostream& output)
+    {
+        if (s.expressions.size() > 0)
+            TranslateExpression(s.expressions.front(), output);
+
+        return BuildAsm({"RET"});
+    }
+
 
     std::string StackCodeGenerator::expr_id(const expr& e, std::ostream& output)
     {
-        RETURN_ERROR();
+        identifier_type idType = e.id.type;
+        std::string instr;
+        if (idType == identifier_type::ARG_VAR)
+            instr = "LDA";
+        else if (idType == identifier_type::LOCAL_VAR)
+            instr = "LDL";
+        else
+            RETURN_ERROR();
+
+        if (GetDataTypeWords(e.dataType) == 2) // If 64-bit data type.
+            instr.append(".64");
+
+        return BuildAsm({instr, STR(e.id.position)});
     }
 
     std::string StackCodeGenerator::expr_literal(const expr& e, std::ostream& output)
@@ -241,7 +283,13 @@ namespace Compiler
 
     std::string StackCodeGenerator::expr_func_call(const expr& e, std::ostream& output)
     {
-        RETURN_ERROR();
+        const expr& func = e.operands.front();
+        const expr& args = e.operands.back();
+        auto it = args.operands.begin();
+        while (it != args.operands.end())
+            TranslateExpression(*it++, output);
+        
+        return BuildAsm({"CALL", func.id.id});
     }
 
     //---- RegisterCodeGenerator Implementation ----//
@@ -272,6 +320,11 @@ namespace Compiler
     }
 
     std::string RegisterCodeGenerator::stmt_destruction(const stmt& s, std::ostream& output)
+    {
+        RETURN_ERROR();
+    }
+
+    std::string RegisterCodeGenerator::stmt_return(const stmt& s, std::ostream& output)
     {
         RETURN_ERROR();
     }

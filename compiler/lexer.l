@@ -102,6 +102,7 @@ blank       [ \t\r]
 "["         return Compiler::RackParser::make_L_SQ(loc);    
 "]"         return Compiler::RackParser::make_R_SQ(loc);    
 ";"         return Compiler::RackParser::make_SEMICOLON(loc);
+","         return Compiler::RackParser::make_COMMA(loc);
 
 "if"        return Compiler::RackParser::make_IF(loc);
 "else"      return Compiler::RackParser::make_ELSE(loc);
@@ -114,6 +115,7 @@ blank       [ \t\r]
 "string"    return Compiler::RackParser::make_STRING(loc);
 "create"    return Compiler::RackParser::make_CREATE(loc);
 "destroy"   return Compiler::RackParser::make_DESTROY(loc);
+"return"    return Compiler::RackParser::make_RETURN(loc);
 
 {id}        return Compiler::RackParser::make_ID(yytext, loc);
 {num}       return make_NUM(yytext, loc);
