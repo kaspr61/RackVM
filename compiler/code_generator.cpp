@@ -29,7 +29,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define STR(x) std::to_string(x)
 #define MOV(x) std::move(x)
-#define RETURN_ERROR() {m_hasError = true; return std::string("error -> ").append(__FUNCTION__);}
+#define RETURN_ERROR() {m_hasError = true; output << "error -> " << __FUNCTION__ << std::endl;}
 
 namespace Compiler
 {
@@ -79,16 +79,14 @@ namespace Compiler
         switch (s.type)
         {
             case stmt_type::ASSIGNMENT:
-            case stmt_type::ASSIGN_OFFSET: output << stmt_assignment(s, output) << std::endl;
-                break;
-
-            case stmt_type::INITIALIZATION: output << stmt_initialization(s, output) << std::endl;
+            case stmt_type::INITIALIZATION:
+            case stmt_type::ASSIGN_OFFSET: stmt_assignment(s, output);
                 break;
 
             case stmt_type::FUNC_CALL: stmt_func_call(s, output);
                 break;
 
-            case stmt_type::BRANCH: output << stmt_branch(s, output) << std::endl;
+            case stmt_type::BRANCH: stmt_branch(s, output);
                 break;
 
             case stmt_type::BLOCK: 
@@ -97,13 +95,13 @@ namespace Compiler
                     TranslateStatement(*substmt++, output);
                 break;
 
-            case stmt_type::CREATION: output << stmt_creation(s, output) << std::endl;
+            case stmt_type::CREATION: stmt_creation(s, output);
                 break;
 
-            case stmt_type::DESTRUCTION: output << stmt_destruction(s, output) << std::endl;
+            case stmt_type::DESTRUCTION: stmt_destruction(s, output);
                 break;
 
-            case stmt_type::RETURN: output << stmt_return(s, output) << std::endl;
+            case stmt_type::RETURN: stmt_return(s, output);
                 break;
 
             default: break;
@@ -116,21 +114,31 @@ namespace Compiler
     {
         switch (e.type)
         {
-            case expr_type::ID:
-            case expr_type::ID_OFFSET: output << expr_id(e, output) << std::endl;
+            case expr_type::ID: expr_id(e, output);
+                break;
+
+            case expr_type::ID_OFFSET: expr_id_offset(e, output);
                 break;
 
             case expr_type::NUMBER:
-            case expr_type::STRING: output << expr_literal(e, output) << std::endl;
+            case expr_type::STRING: expr_literal(e, output);
                 break;
 
             case expr_type::ADD:
             case expr_type::SUB:
             case expr_type::MUL:
-            case expr_type::DIV: output << expr_arithmetic(e, output) << std::endl;
+            case expr_type::DIV: expr_arithmetic(e, output);
                 break;
 
-            case expr_type::CALL: output << expr_func_call(e, output) << std::endl;
+            case expr_type::CALL: expr_func_call(e, output);
+                break;
+
+            case expr_type::EQ:
+            case expr_type::NEQ:
+            case expr_type::GT:
+            case expr_type::LT:
+            case expr_type::GEQ:
+            case expr_type::LEQ: expr_comparison(e, output);
                 break;
         }
 
@@ -157,65 +165,69 @@ namespace Compiler
 
     //---- StackCodeGenerator Implementation ----//
 
-    std::string StackCodeGenerator::stmt_assignment(const stmt& s, std::ostream& output)
+    void StackCodeGenerator::stmt_assignment(const stmt& s, std::ostream& output)
+    {
+        TranslateExpression(s.expressions.front(), output);
+        
+        identifier_type idType = s.id.type;
+        std::string instr;
+        if (idType == identifier_type::ARG_VAR)
+            instr = "STA";
+        else if (idType == identifier_type::LOCAL_VAR)
+            instr = "STL";
+        else
+            RETURN_ERROR();
+
+        if (GetDataTypeWords(s.id.dataType) == 2) // If 64-bit data type.
+            instr.append(".64");
+
+        output << BuildAsm({instr, STR(s.id.position)}) << std::endl;
+    }
+
+    void StackCodeGenerator::stmt_func_call(const stmt& s, std::ostream& output)
+    {
+        TranslateExpression(s.expressions.front(), output);
+    }
+
+    void StackCodeGenerator::stmt_branch(const stmt& s, std::ostream& output)
+    {
+        RETURN_ERROR();
+    }
+
+    void StackCodeGenerator::stmt_creation(const stmt& s, std::ostream& output)
     {
         TranslateExpression(s.expressions.front(), output);
 
-        if (s.id.type == identifier_type::LOCAL_VAR)
-            return BuildAsm({"STL", STR(s.id.position)});
-        else if (s.id.type == identifier_type::ARG_VAR)
-            return BuildAsm({"STA", STR(s.id.position)});
+        output << BuildAsm({"NEW"}) << std::endl;
 
-        RETURN_ERROR();
+        if (s.id.type == identifier_type::ARG_VAR)
+            output << BuildAsm({"STA", STR(s.id.position)}) << std::endl;
+        else if (s.id.type == identifier_type::LOCAL_VAR)
+            output << BuildAsm({"STL", STR(s.id.position)}) << std::endl;
+        else
+            RETURN_ERROR();
     }
 
-    std::string StackCodeGenerator::stmt_initialization(const stmt& s, std::ostream& output)
-    {
-        TranslateExpression(s.expressions.front(), output);
-
-        if (s.id.type == identifier_type::LOCAL_VAR)
-            return BuildAsm({"STL", STR(s.id.position)});
-        else if (s.id.type == identifier_type::ARG_VAR)
-            return BuildAsm({"STA", STR(s.id.position)});
-
-        RETURN_ERROR();
-    }
-
-    std::string StackCodeGenerator::stmt_func_call(const stmt& s, std::ostream& output)
-    {
-        TranslateExpression(s.expressions.front(), output);
-
-        return "";
-    }
-
-    std::string StackCodeGenerator::stmt_branch(const stmt& s, std::ostream& output)
+    void StackCodeGenerator::stmt_destruction(const stmt& s, std::ostream& output)
     {
         RETURN_ERROR();
     }
 
-    std::string StackCodeGenerator::stmt_creation(const stmt& s, std::ostream& output)
-    {
-        RETURN_ERROR();
-    }
-
-    std::string StackCodeGenerator::stmt_destruction(const stmt& s, std::ostream& output)
-    {
-        RETURN_ERROR();
-    }
-
-    std::string StackCodeGenerator::stmt_return(const stmt& s, std::ostream& output)
+    void StackCodeGenerator::stmt_return(const stmt& s, std::ostream& output)
     {
         if (s.expressions.size() > 0)
             TranslateExpression(s.expressions.front(), output);
 
-        return BuildAsm({"RET"});
+        output << BuildAsm({"RET"}) << std::endl;
     }
 
 
-    std::string StackCodeGenerator::expr_id(const expr& e, std::ostream& output)
+    void StackCodeGenerator::expr_id(const expr& e, std::ostream& output)
     {
         identifier_type idType = e.id.type;
+        int32_t dataTypeWords = GetDataTypeWords(e.dataType);
         std::string instr;
+
         if (idType == identifier_type::ARG_VAR)
             instr = "LDA";
         else if (idType == identifier_type::LOCAL_VAR)
@@ -223,65 +235,93 @@ namespace Compiler
         else
             RETURN_ERROR();
 
-        if (GetDataTypeWords(e.dataType) == 2) // If 64-bit data type.
+        if (dataTypeWords == 2) // If 64-bit data type.
             instr.append(".64");
 
-        return BuildAsm({instr, STR(e.id.position)});
+        output << BuildAsm({instr, STR(e.id.position)}) << std::endl;
     }
 
-    std::string StackCodeGenerator::expr_literal(const expr& e, std::ostream& output)
+    void StackCodeGenerator::expr_id_offset(const expr& e, std::ostream& output)
+    {
+        TranslateExpression(e.operands.front(), output);
+        TranslateExpression(e.operands.back(), output);
+
+        output << BuildAsm({"ADD"}) << std::endl;
+        
+        if (GetDataTypeWords(e.dataType) == 2) // If array of 64-bit values.
+            output << BuildAsm({"LDM.64"}) << std::endl;
+        else
+            output << BuildAsm({"LDM"}) << std::endl;
+    }
+
+    void StackCodeGenerator::expr_literal(const expr& e, std::ostream& output)
     {
         if (e.dataType == DataType::INT)
-            return BuildAsm({"LDI", STR(e.intValue)});
+            output << BuildAsm({"LDI", STR(e.intValue)}) << std::endl;
         else if (e.dataType == DataType::LONG)
-            return BuildAsm({"LDI.64", STR(e.longValue)});
-
-        RETURN_ERROR();
+            output << BuildAsm({"LDI.64", STR(e.longValue)}) << std::endl;
+        else
+            RETURN_ERROR();
     }
 
-    std::string StackCodeGenerator::expr_arithmetic(const expr& e, std::ostream& output)
+    void StackCodeGenerator::expr_arithmetic(const expr& e, std::ostream& output)
     {
         TranslateExpression(e.operands.front(), output);
         TranslateExpression(e.operands.back(), output);
 
         if (e.dataType == DataType::INT)
         {
-            if      (e.type == expr_type::ADD) return BuildAsm({"ADD"});
-            else if (e.type == expr_type::SUB) return BuildAsm({"SUB"});
-            else if (e.type == expr_type::MUL) return BuildAsm({"MUL"});
-            else if (e.type == expr_type::DIV) return BuildAsm({"DIV"});
+            if      (e.type == expr_type::ADD) output << BuildAsm({"ADD"}) << std::endl;
+            else if (e.type == expr_type::SUB) output << BuildAsm({"SUB"}) << std::endl;
+            else if (e.type == expr_type::MUL) output << BuildAsm({"MUL"}) << std::endl;
+            else if (e.type == expr_type::DIV) output << BuildAsm({"DIV"}) << std::endl;
         }
         else if (e.dataType == DataType::LONG)
         {
-            if      (e.type == expr_type::ADD) return BuildAsm({"ADD.64"});
-            else if (e.type == expr_type::SUB) return BuildAsm({"SUB.64"});
-            else if (e.type == expr_type::MUL) return BuildAsm({"MUL.64"});
-            else if (e.type == expr_type::DIV) return BuildAsm({"DIV.64"});
+            if      (e.type == expr_type::ADD) output << BuildAsm({"ADD.64"}) << std::endl;
+            else if (e.type == expr_type::SUB) output << BuildAsm({"SUB.64"}) << std::endl;
+            else if (e.type == expr_type::MUL) output << BuildAsm({"MUL.64"}) << std::endl;
+            else if (e.type == expr_type::DIV) output << BuildAsm({"DIV.64"}) << std::endl;
         }
         else if (e.dataType == DataType::FLOAT)
         {
-            if      (e.type == expr_type::ADD) return BuildAsm({"ADD.F"});
-            else if (e.type == expr_type::SUB) return BuildAsm({"SUB.F"});
-            else if (e.type == expr_type::MUL) return BuildAsm({"MUL.F"});
-            else if (e.type == expr_type::DIV) return BuildAsm({"DIV.F"});
+            if      (e.type == expr_type::ADD) output << BuildAsm({"ADD.F"}) << std::endl;
+            else if (e.type == expr_type::SUB) output << BuildAsm({"SUB.F"}) << std::endl;
+            else if (e.type == expr_type::MUL) output << BuildAsm({"MUL.F"}) << std::endl;
+            else if (e.type == expr_type::DIV) output << BuildAsm({"DIV.F"}) << std::endl;
         }
         else if (e.dataType == DataType::DOUBLE)
         {
-            if      (e.type == expr_type::ADD) return BuildAsm({"ADD.F64"});
-            else if (e.type == expr_type::SUB) return BuildAsm({"SUB.F64"});
-            else if (e.type == expr_type::MUL) return BuildAsm({"MUL.F64"});
-            else if (e.type == expr_type::DIV) return BuildAsm({"DIV.F64"});
+            if      (e.type == expr_type::ADD) output << BuildAsm({"ADD.F64"}) << std::endl;
+            else if (e.type == expr_type::SUB) output << BuildAsm({"SUB.F64"}) << std::endl;
+            else if (e.type == expr_type::MUL) output << BuildAsm({"MUL.F64"}) << std::endl;
+            else if (e.type == expr_type::DIV) output << BuildAsm({"DIV.F64"}) << std::endl;
         }
-
-        RETURN_ERROR();
+        else
+            RETURN_ERROR();
     }
 
-    std::string StackCodeGenerator::expr_comparison(const expr& e, std::ostream& output)
+    void StackCodeGenerator::expr_comparison(const expr& e, std::ostream& output)
     {
-        RETURN_ERROR();
+        TranslateExpression(e.operands.front(), output);
+        TranslateExpression(e.operands.back(), output);
+
+        std::string instr;
+        if      (e.type == expr_type::EQ)  instr = "CPEQ";
+        else if (e.type == expr_type::NEQ) instr = "CPNQ";
+        else if (e.type == expr_type::GT)  instr = "CPGT";
+        else if (e.type == expr_type::LT)  instr = "CPLT";
+        else if (e.type == expr_type::GEQ) instr = "CPGQ";
+        else if (e.type == expr_type::LEQ) instr = "CPLQ";
+        else    RETURN_ERROR();
+
+        if (GetDataTypeWords(e.dataType) == 2) // If 64-bit data type.
+            instr.append(".64");
+        
+        output << BuildAsm({instr}) << std::endl;
     }
 
-    std::string StackCodeGenerator::expr_func_call(const expr& e, std::ostream& output)
+    void StackCodeGenerator::expr_func_call(const expr& e, std::ostream& output)
     {
         const expr& func = e.operands.front();
         const expr& args = e.operands.back();
@@ -289,68 +329,68 @@ namespace Compiler
         while (it != args.operands.end())
             TranslateExpression(*it++, output);
         
-        return BuildAsm({"CALL", func.id.id});
+        output << BuildAsm({"CALL", func.id.id}) << std::endl;
     }
 
     //---- RegisterCodeGenerator Implementation ----//
   
-    std::string RegisterCodeGenerator::stmt_assignment(const stmt& s, std::ostream& output)
+    void RegisterCodeGenerator::stmt_assignment(const stmt& s, std::ostream& output)
     {
         RETURN_ERROR();
     }
 
-    std::string RegisterCodeGenerator::stmt_initialization(const stmt& s, std::ostream& output)
+    void RegisterCodeGenerator::stmt_func_call(const stmt& s, std::ostream& output)
     {
         RETURN_ERROR();
     }
 
-    std::string RegisterCodeGenerator::stmt_func_call(const stmt& s, std::ostream& output)
+    void RegisterCodeGenerator::stmt_branch(const stmt& s, std::ostream& output)
     {
         RETURN_ERROR();
     }
 
-    std::string RegisterCodeGenerator::stmt_branch(const stmt& s, std::ostream& output)
+    void RegisterCodeGenerator::stmt_creation(const stmt& s, std::ostream& output)
     {
         RETURN_ERROR();
     }
 
-    std::string RegisterCodeGenerator::stmt_creation(const stmt& s, std::ostream& output)
+    void RegisterCodeGenerator::stmt_destruction(const stmt& s, std::ostream& output)
     {
         RETURN_ERROR();
     }
 
-    std::string RegisterCodeGenerator::stmt_destruction(const stmt& s, std::ostream& output)
-    {
-        RETURN_ERROR();
-    }
-
-    std::string RegisterCodeGenerator::stmt_return(const stmt& s, std::ostream& output)
+    void RegisterCodeGenerator::stmt_return(const stmt& s, std::ostream& output)
     {
         RETURN_ERROR();
     }
 
 
-    std::string RegisterCodeGenerator::expr_id(const expr& e, std::ostream& output)
+    void RegisterCodeGenerator::expr_id(const expr& e, std::ostream& output)
     {
         RETURN_ERROR();
     }
 
-    std::string RegisterCodeGenerator::expr_literal(const expr& e, std::ostream& output)
+    void RegisterCodeGenerator::expr_id_offset(const expr& e, std::ostream& output)
     {
         RETURN_ERROR();
     }
 
-    std::string RegisterCodeGenerator::expr_arithmetic(const expr& e, std::ostream& output)
+    void RegisterCodeGenerator::expr_literal(const expr& e, std::ostream& output)
     {
         RETURN_ERROR();
     }
 
-    std::string RegisterCodeGenerator::expr_comparison(const expr& e, std::ostream& output)
+    void RegisterCodeGenerator::expr_arithmetic(const expr& e, std::ostream& output)
     {
         RETURN_ERROR();
     }
 
-    std::string RegisterCodeGenerator::expr_func_call(const expr& e, std::ostream& output)
+    void RegisterCodeGenerator::expr_comparison(const expr& e, std::ostream& output)
+    {
+        RETURN_ERROR();
+    }
+
+    void RegisterCodeGenerator::expr_func_call(const expr& e, std::ostream& output)
     {
         RETURN_ERROR();
     }

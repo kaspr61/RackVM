@@ -70,6 +70,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     #define TypeCheck(ex) {std::string err = ex.CheckType(); if (err != "") error(cmp.m_location, err);}
     #define TypeCheckAssign(st) {std::string err = st.CheckAssignmentType(); if (err != "") error(cmp.m_location, err);}
     #define TypeCheckReturn(st) {std::string err = cmp.CheckReturnType(st); if (err != "") error(cmp.m_location, err);}
+    #define CheckArrayCreation(st) {std::string err = cmp.CheckArrayCreation(st); if (err != "") error(cmp.m_location, err);}
 }
 
 %define api.token.prefix {T_}
@@ -202,7 +203,7 @@ stmt: data_type ID SEMICOLON                    {$$ = stmt(stmt_type::DECLARATIO
     | ID ASSIGN CREATE expr SEMICOLON           {$$ = stmt(stmt_type::CREATION, cmp.UseVar(M($1)), M($4));}
     | ID L_SQ expr R_SQ ASSIGN expr SEMICOLON   {$$ = stmt(stmt_type::ASSIGN_OFFSET, cmp.UseVar(M($1)), {M($3), M($6)}); TypeCheckAssign($$);}
     | data_type ID ASSIGN expr SEMICOLON        {$$ = stmt(stmt_type::INITIALIZATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR), M($4));  TypeCheckAssign($$);}
-    | data_type ID ASSIGN CREATE expr SEMICOLON {$$ = stmt(stmt_type::CREATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR), M($5));}
+    | data_type ID ASSIGN CREATE expr SEMICOLON {$$ = stmt(stmt_type::CREATION, cmp.DeclVar($1, M($2), identifier_type::LOCAL_VAR), M($5)); CheckArrayCreation($$);}
     | DESTROY ID SEMICOLON                      {$$ = stmt(stmt_type::DESTRUCTION, cmp.UseVar(M($2)));}
     | RETURN expr SEMICOLON                     {$$ = stmt(stmt_type::RETURN, M($2)); TypeCheckReturn($$);}
     | RETURN SEMICOLON                          {$$ = stmt(stmt_type::RETURN); TypeCheckReturn($$);}
@@ -229,7 +230,7 @@ binary_expr: expr PLUS expr     {$$ = expr(expr_type::ADD, M($1), M($3));}
            | expr MULT expr     {$$ = expr(expr_type::MUL, M($1), M($3));}
            | expr DIV expr      {$$ = expr(expr_type::DIV, M($1), M($3));}
            | expr EQ expr       {$$ = expr(expr_type::EQ,  M($1), M($3));}
-           | expr NEQ expr      {$$ = expr(expr_type::EQ,  expr(expr_type::EQ, M($1), M($3)), (int32_t)0);}
+           | expr NEQ expr      {$$ = expr(expr_type::NEQ, M($1), M($3));}
            | expr GT expr       {$$ = expr(expr_type::GT,  M($1), M($3));}
            | expr LT expr       {$$ = expr(expr_type::LT,  M($1), M($3));}
            | expr GEQ expr      {$$ = expr(expr_type::GEQ, M($1), M($3));}

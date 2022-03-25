@@ -272,9 +272,11 @@ namespace Compiler
             if (type == expr_type::CALL)
                 return "";
 
-            // Special case check for array indexing, that index is an integer.
+            // Special case check for array indexing.
             if (type == expr_type::ID_OFFSET)
             {
+                dataType = ARRAY_TO_BASE(lhs.dataType);
+
                 if (rhs.dataType != DataType::INT && rhs.dataType != DataType::LONG)
                     return Msg_ArrayIndexNonInteger(rhs.dataType);
 
@@ -375,7 +377,7 @@ namespace Compiler
             {
                 const expr& value = expressions.front();
                 DataType valueDataType = value.dataType;
-                if (value.operands.front().type == expr_type::ID)
+                if (value.operands.front().type == expr_type::ID && value.type != expr_type::ID_OFFSET)
                     valueDataType = value.operands.front().dataType;
 
                 if (valueDataType != id.dataType)

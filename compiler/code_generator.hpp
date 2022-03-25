@@ -60,19 +60,19 @@ namespace Compiler
         bool TranslateExpression(const expr& expr, std::ostream& output);
 
     private:
-        virtual std::string stmt_assignment(const stmt& s, std::ostream& output) = 0;
-        virtual std::string stmt_initialization(const stmt& s, std::ostream& output) = 0;
-        virtual std::string stmt_func_call(const stmt& s, std::ostream& output) = 0;
-        virtual std::string stmt_branch(const stmt& s, std::ostream& output) = 0;
-        virtual std::string stmt_creation(const stmt& s, std::ostream& output) = 0;
-        virtual std::string stmt_destruction(const stmt& s, std::ostream& output) = 0;
-        virtual std::string stmt_return(const stmt& s, std::ostream& output) = 0;
+        virtual void stmt_assignment(const stmt& s, std::ostream& output) = 0;
+        virtual void stmt_func_call(const stmt& s, std::ostream& output) = 0;
+        virtual void stmt_branch(const stmt& s, std::ostream& output) = 0;
+        virtual void stmt_creation(const stmt& s, std::ostream& output) = 0;
+        virtual void stmt_destruction(const stmt& s, std::ostream& output) = 0;
+        virtual void stmt_return(const stmt& s, std::ostream& output) = 0;
 
-        virtual std::string expr_id(const expr& e, std::ostream& output) = 0;
-        virtual std::string expr_literal(const expr& e, std::ostream& output) = 0;
-        virtual std::string expr_arithmetic(const expr& e, std::ostream& output) = 0;
-        virtual std::string expr_comparison(const expr& e, std::ostream& output) = 0;
-        virtual std::string expr_func_call(const expr& e, std::ostream& output) = 0;
+        virtual void expr_id(const expr& e, std::ostream& output) = 0;
+        virtual void expr_id_offset(const expr& e, std::ostream& output) = 0;
+        virtual void expr_literal(const expr& e, std::ostream& output) = 0;
+        virtual void expr_arithmetic(const expr& e, std::ostream& output) = 0;
+        virtual void expr_comparison(const expr& e, std::ostream& output) = 0;
+        virtual void expr_func_call(const expr& e, std::ostream& output) = 0;
 
         template<typename ...T>
         inline void Error(const T&... args)
@@ -93,38 +93,38 @@ namespace Compiler
     class StackCodeGenerator : public CodeGenerator
     {
     private:
-        virtual std::string stmt_assignment(const stmt& s, std::ostream& output);
-        virtual std::string stmt_initialization(const stmt& s, std::ostream& output);
-        virtual std::string stmt_func_call(const stmt& s, std::ostream& output);
-        virtual std::string stmt_branch(const stmt& s, std::ostream& output);
-        virtual std::string stmt_creation(const stmt& s, std::ostream& output);
-        virtual std::string stmt_destruction(const stmt& s, std::ostream& output);
-        virtual std::string stmt_return(const stmt& s, std::ostream& output);
+        virtual void stmt_assignment(const stmt& s, std::ostream& output);
+        virtual void stmt_func_call(const stmt& s, std::ostream& output);
+        virtual void stmt_branch(const stmt& s, std::ostream& output);
+        virtual void stmt_creation(const stmt& s, std::ostream& output);
+        virtual void stmt_destruction(const stmt& s, std::ostream& output);
+        virtual void stmt_return(const stmt& s, std::ostream& output);
 
-        virtual std::string expr_id(const expr& e, std::ostream& output);
-        virtual std::string expr_literal(const expr& e, std::ostream& output);
-        virtual std::string expr_arithmetic(const expr& e, std::ostream& output);
-        virtual std::string expr_comparison(const expr& e, std::ostream& output);
-        virtual std::string expr_func_call(const expr& e, std::ostream& output);
+        virtual void expr_id(const expr& e, std::ostream& output);
+        virtual void expr_id_offset(const expr& e, std::ostream& output);
+        virtual void expr_literal(const expr& e, std::ostream& output);
+        virtual void expr_arithmetic(const expr& e, std::ostream& output);
+        virtual void expr_comparison(const expr& e, std::ostream& output);
+        virtual void expr_func_call(const expr& e, std::ostream& output);
     };
 
     ////======== RegisterCodeGenerator ========////
     class RegisterCodeGenerator : public CodeGenerator
     {
     private:
-        virtual std::string stmt_assignment(const stmt& s, std::ostream& output);
-        virtual std::string stmt_initialization(const stmt& s, std::ostream& output);
-        virtual std::string stmt_func_call(const stmt& s, std::ostream& output);
-        virtual std::string stmt_branch(const stmt& s, std::ostream& output);
-        virtual std::string stmt_creation(const stmt& s, std::ostream& output);
-        virtual std::string stmt_destruction(const stmt& s, std::ostream& output);
-        virtual std::string stmt_return(const stmt& s, std::ostream& output);
+        virtual void stmt_assignment(const stmt& s, std::ostream& output);
+        virtual void stmt_func_call(const stmt& s, std::ostream& output);
+        virtual void stmt_branch(const stmt& s, std::ostream& output);
+        virtual void stmt_creation(const stmt& s, std::ostream& output);
+        virtual void stmt_destruction(const stmt& s, std::ostream& output);
+        virtual void stmt_return(const stmt& s, std::ostream& output);
 
-        virtual std::string expr_id(const expr& e, std::ostream& output);
-        virtual std::string expr_literal(const expr& e, std::ostream& output);
-        virtual std::string expr_arithmetic(const expr& e, std::ostream& output);
-        virtual std::string expr_comparison(const expr& e, std::ostream& output);
-        virtual std::string expr_func_call(const expr& e, std::ostream& output);
+        virtual void expr_id(const expr& e, std::ostream& output);
+        virtual void expr_id_offset(const expr& e, std::ostream& output);
+        virtual void expr_literal(const expr& e, std::ostream& output);
+        virtual void expr_arithmetic(const expr& e, std::ostream& output);
+        virtual void expr_comparison(const expr& e, std::ostream& output);
+        virtual void expr_func_call(const expr& e, std::ostream& output);
     };
 
 }

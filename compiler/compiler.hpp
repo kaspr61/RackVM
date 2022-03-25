@@ -81,6 +81,7 @@ namespace Compiler
         const identifier& UseVar(std::string&& varId) const;
         const func& UseFunc(const std::string& funcId, const std::list<expr>& args) const;
         std::string CheckReturnType(const stmt& retStmt) const;
+        std::string CheckArrayCreation(stmt& st);
         
         inline void EnterScope() { m_scopes.emplace_back(); }
         inline void ExitScope()  { m_scopes.pop_back(); }

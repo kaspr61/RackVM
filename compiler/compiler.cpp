@@ -203,6 +203,25 @@ namespace Compiler
         return true;
     }
 
+    std::string RackCompiler::CheckArrayCreation(stmt& st)
+    {
+        // Check that array length expression is an int.
+        if (st.expressions.back().dataType != DataType::INT)
+            return (std::stringstream() << "Array length must be an int value: " << st.expressions.back().dataType).str();
+        
+        // Handle arrays of varying size elements.
+        int32_t dataTypeWords = GetDataTypeWords(ARRAY_TO_BASE(st.id.dataType));
+        expr arrayLen = std::move(st.expressions.back());
+        st.expressions.pop_back();
+
+        // If element data type is larger than 1 word, multiply array length by nbr of words.
+        if (dataTypeWords > 1)
+            st.expressions.emplace_back(expr_type::MUL, std::move(arrayLen), expr(dataTypeWords));
+
+        st.expressions.back().CheckType();
+        return "";
+    }
+
     ////======== END OF COMPILER IMPLEMENTATION ========////
 
     std::ostream& operator <<(std::ostream& os, const stmt& s)

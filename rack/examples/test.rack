@@ -6,6 +6,8 @@ int add(int l, int r)
 
 do_stuff()
 {
+    long[] arr = create 64;
+    long a = arr[1];
 }
 
 main()
