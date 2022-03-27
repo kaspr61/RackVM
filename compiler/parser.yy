@@ -138,12 +138,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 %nonassoc IFX;
 %nonassoc ELSE;
 
-%right NOT;
-%left  PLUS MINUS;
-%left  MULT DIV;
+%left  OR AND;
 %left  GT LT GEQ LEQ;
 %left  EQ NEQ;
-%left  OR AND;
+%left  PLUS MINUS;
+%left  MULT DIV;
+%right NOT;
 
 %start program;
 

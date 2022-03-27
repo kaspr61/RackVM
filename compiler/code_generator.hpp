@@ -44,35 +44,42 @@ namespace Compiler
     {
     private:
         std::stringstream m_ss;
+        int32_t m_nextLabel;
+        std::ostream& m_out;
 
     public:
-        CodeGenerator();
+        CodeGenerator(std::ostream& output);
         virtual ~CodeGenerator();
 
-        bool TranslateFunctions(const std::vector<func>& funcList, std::ostream& output);
+        bool TranslateFunctions(const std::vector<func>& funcList);
 
         // Translates the given statement recursively, and outputs 
-        // the resulting assembly code into 'output'.
-        bool TranslateStatement(const stmt& stmt, std::ostream& output);
+        // the resulting assembly code into m_out.
+        bool TranslateStatement(const stmt& stmt);
 
         // Translates the given expression recursively, and outputs 
-        // the resulting assembly code into 'output'.
-        bool TranslateExpression(const expr& expr, std::ostream& output);
+        // the resulting assembly code into m_out.
+        bool TranslateExpression(const expr& expr);
 
     private:
-        virtual void stmt_assignment(const stmt& s, std::ostream& output) = 0;
-        virtual void stmt_func_call(const stmt& s, std::ostream& output) = 0;
-        virtual void stmt_branch(const stmt& s, std::ostream& output) = 0;
-        virtual void stmt_creation(const stmt& s, std::ostream& output) = 0;
-        virtual void stmt_destruction(const stmt& s, std::ostream& output) = 0;
-        virtual void stmt_return(const stmt& s, std::ostream& output) = 0;
+        virtual void stmt_assignment(const stmt& s) = 0;
+        virtual void stmt_func_call(const stmt& s) = 0;
+        virtual void stmt_branch(const stmt& s) = 0;
+        virtual void stmt_creation(const stmt& s) = 0;
+        virtual void stmt_destruction(const stmt& s) = 0;
+        virtual void stmt_return(const stmt& s) = 0;
 
-        virtual void expr_id(const expr& e, std::ostream& output) = 0;
-        virtual void expr_id_offset(const expr& e, std::ostream& output) = 0;
-        virtual void expr_literal(const expr& e, std::ostream& output) = 0;
-        virtual void expr_arithmetic(const expr& e, std::ostream& output) = 0;
-        virtual void expr_comparison(const expr& e, std::ostream& output) = 0;
-        virtual void expr_func_call(const expr& e, std::ostream& output) = 0;
+        virtual void expr_id(const expr& e) = 0;
+        virtual void expr_id_offset(const expr& e) = 0;
+        virtual void expr_literal(const expr& e) = 0;
+        virtual void expr_arithmetic(const expr& e) = 0;
+        virtual void expr_logical(const expr& e) = 0;
+        virtual void expr_comparison(const expr& e) = 0;
+        virtual void expr_func_call(const expr& e) = 0;
+        virtual void expr_unary(const expr& e) = 0;
+
+        // Builds a single assembly instruction as a string, based on the given operands.
+        std::string BuildAsm(std::initializer_list<std::string>& operands);
 
         template<typename ...T>
         inline void Error(const T&... args)
@@ -84,47 +91,81 @@ namespace Compiler
 
     protected:
         bool m_hasError;
+        std::string m_elseLabel;
+        std::string m_endLabel;
+        std::string m_lastInstr;
+        std::string m_ifLabel;
 
-        // Builds a single assembly instruction as a string, based on the given operands.
-        std::string BuildAsm(std::initializer_list<std::string>&& operands);
+        inline std::string CreateLabel()
+        {
+            return ".L" + std::to_string(m_nextLabel++);
+        }
+
+        inline void WriteAsm(std::initializer_list<std::string>&& operands)
+        {
+            m_lastInstr = *operands.begin();
+            m_out << BuildAsm(operands) << std::endl;
+        }
+
+        inline void WriteLabel(const std::string& label)
+        {
+            m_lastInstr = label;
+            m_out << label << ':' << std::endl;
+        }
+
+        inline bool GetLastInstrIsBranch() const
+        {
+            return m_lastInstr == "BRZ" || m_lastInstr == "BRNZ";
+        }
     };
 
     ////======== StackCodeGenerator ========////
     class StackCodeGenerator : public CodeGenerator
     {
+    public:
+        StackCodeGenerator(std::ostream& output);
+        ~StackCodeGenerator();
     private:
-        virtual void stmt_assignment(const stmt& s, std::ostream& output);
-        virtual void stmt_func_call(const stmt& s, std::ostream& output);
-        virtual void stmt_branch(const stmt& s, std::ostream& output);
-        virtual void stmt_creation(const stmt& s, std::ostream& output);
-        virtual void stmt_destruction(const stmt& s, std::ostream& output);
-        virtual void stmt_return(const stmt& s, std::ostream& output);
+        virtual void stmt_assignment(const stmt& s);
+        virtual void stmt_func_call(const stmt& s);
+        virtual void stmt_branch(const stmt& s);
+        virtual void stmt_creation(const stmt& s);
+        virtual void stmt_destruction(const stmt& s);
+        virtual void stmt_return(const stmt& s);
 
-        virtual void expr_id(const expr& e, std::ostream& output);
-        virtual void expr_id_offset(const expr& e, std::ostream& output);
-        virtual void expr_literal(const expr& e, std::ostream& output);
-        virtual void expr_arithmetic(const expr& e, std::ostream& output);
-        virtual void expr_comparison(const expr& e, std::ostream& output);
-        virtual void expr_func_call(const expr& e, std::ostream& output);
+        virtual void expr_id(const expr& e);
+        virtual void expr_id_offset(const expr& e);
+        virtual void expr_literal(const expr& e);
+        virtual void expr_arithmetic(const expr& e);
+        virtual void expr_logical(const expr& e);
+        virtual void expr_comparison(const expr& e);
+        virtual void expr_func_call(const expr& e);
+        virtual void expr_unary(const expr& e);
     };
 
     ////======== RegisterCodeGenerator ========////
     class RegisterCodeGenerator : public CodeGenerator
     {
-    private:
-        virtual void stmt_assignment(const stmt& s, std::ostream& output);
-        virtual void stmt_func_call(const stmt& s, std::ostream& output);
-        virtual void stmt_branch(const stmt& s, std::ostream& output);
-        virtual void stmt_creation(const stmt& s, std::ostream& output);
-        virtual void stmt_destruction(const stmt& s, std::ostream& output);
-        virtual void stmt_return(const stmt& s, std::ostream& output);
+    public:
+        RegisterCodeGenerator(std::ostream& output);
+        ~RegisterCodeGenerator();
 
-        virtual void expr_id(const expr& e, std::ostream& output);
-        virtual void expr_id_offset(const expr& e, std::ostream& output);
-        virtual void expr_literal(const expr& e, std::ostream& output);
-        virtual void expr_arithmetic(const expr& e, std::ostream& output);
-        virtual void expr_comparison(const expr& e, std::ostream& output);
-        virtual void expr_func_call(const expr& e, std::ostream& output);
+    private:
+        virtual void stmt_assignment(const stmt& s);
+        virtual void stmt_func_call(const stmt& s);
+        virtual void stmt_branch(const stmt& s);
+        virtual void stmt_creation(const stmt& s);
+        virtual void stmt_destruction(const stmt& s);
+        virtual void stmt_return(const stmt& s);
+
+        virtual void expr_id(const expr& e);
+        virtual void expr_id_offset(const expr& e);
+        virtual void expr_literal(const expr& e);
+        virtual void expr_arithmetic(const expr& e);
+        virtual void expr_logical(const expr& e);
+        virtual void expr_comparison(const expr& e);
+        virtual void expr_func_call(const expr& e);
+        virtual void expr_unary(const expr& e);
     };
 
 }
