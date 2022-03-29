@@ -169,12 +169,12 @@ namespace Compiler
 
     struct func
     {
-        identifier         id;
-        DataType           returnType;
-        size_t             localVarCnt;
-        size_t             argVarCnt;
-        std::vector<stmt>  statements;
-        std::vector<stmt>  args;
+        identifier               id;
+        DataType                 returnType;
+        size_t                   localVarCnt;
+        size_t                   argVarCnt;
+        std::vector<stmt>        statements;
+        std::vector<stmt>        args;
     };
 
     struct expr

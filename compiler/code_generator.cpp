@@ -29,20 +29,17 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define STR(x) std::to_string(x)
 #define MOV(x) std::move(x)
-#define RETURN_ERROR() {m_hasError = true; WriteAsm({"error ->", __FUNCTION__ });}
+#define RETURN_ERROR() {m_hasError = true; AddInstruction({"NOP", "; error ->", __FUNCTION__ });}
 
 namespace Compiler
 {
     //---- CodeGenerator Implementation ----//
 
-    CodeGenerator::CodeGenerator(std::ostream& output) :
+    CodeGenerator::CodeGenerator() :
         m_ss(), 
         m_hasError(false), 
         m_nextLabel(0), 
-        m_elseLabel(""), 
-        m_endLabel(""), 
-        m_ifLabel(""), 
-        m_out(output),
+        m_currFunc(""),
         m_lastInstr()
         {
         }
@@ -56,7 +53,8 @@ namespace Compiler
         auto funcIt = funcList.begin();
         while (funcIt != funcList.end())
         {
-            WriteLabel(funcIt->id.id);
+            m_currFunc = funcIt->id.id;
+            m_instr.emplace(m_currFunc, std::vector<Instruction>());
 
             if (funcIt->argVarCnt > 0)
             {
@@ -65,9 +63,9 @@ namespace Compiler
                 for (auto argIt = funcIt->args.rbegin(); argIt != funcIt->args.rend(); ++argIt)
                 {
                     if (GetDataTypeWords(argIt->id.dataType) == 2)
-                        WriteAsm({"STA.64", STR(argIt->id.position)});
+                        AddInstruction({"STA.64", STR(argIt->id.position)});
                     else
-                        WriteAsm({"STA", STR(argIt->id.position)});
+                        AddInstruction({"STA", STR(argIt->id.position)});
                 }
             }
 
@@ -75,6 +73,8 @@ namespace Compiler
             auto stmtIt = funcIt->statements.begin();
             while (stmtIt != funcIt->statements.end())
                 TranslateStatement(*stmtIt++);
+
+            m_instr[m_currFunc].front().label = m_currFunc;
 
             ++funcIt;
         }
@@ -162,7 +162,7 @@ namespace Compiler
         return !m_hasError;
     }
 
-    std::string CodeGenerator::BuildAsm(std::initializer_list<std::string>& operands)
+    std::string CodeGenerator::BuildAsm(const std::vector<std::string>& operands)
     {
         if (operands.size() < 1)
             return std::string("error: ").append(__FUNCTION__);
@@ -180,10 +180,59 @@ namespace Compiler
         return m_ss.str();
     }
 
+    void CodeGenerator::Flush(std::ostream& output)
+    {
+        for (auto& map : m_instr)
+        {
+            // Do a first pass to add labels to the instructions that
+            // are pointed to by next or cond.
+            for (auto instr = map.second.begin(); instr != map.second.end(); ++instr)
+            {
+                // This instruction refers to the instruction AFTER what it is pointing to.
+                if (instr->jumpAfter > -1)
+                {
+                    auto isJumpAfter = [&](Instruction& i) { return &i == &map.second[instr->jumpTo]; };
+
+                    // Get the iterator to the instruction directly after what instr->jumpAfter points to.
+                    if (instr->jumpAfter + 1 < map.second.size())
+                    {
+                        auto& next = map.second[instr->jumpAfter + 1];
+                        // Set up label, if there is none.
+                        if (next.label == "")
+                            next.label = std::move(CreateLabel());
+
+                        // Append the label of the instruction directly AFTER what jumpAfter points to.
+                        instr->operands.push_back(next.label);
+                    }
+                    else
+                        std::cerr << "Tried to jump outside function." << std::endl;
+                }
+                // This instruction refers to the instruction jumpTo is pointing to.
+                else if (instr->jumpTo > -1)
+                {
+                    if (map.second[instr->jumpTo].label == "")
+                        map.second[instr->jumpTo].label = std::move(CreateLabel());
+
+                    // Append the label of the instruction that jumpTo points to.
+                    instr->operands.push_back(map.second[instr->jumpTo].label);
+                }
+            }
+
+            // Do a second pass to actually flush the instruction as text to 'output'.
+            for (auto& instr : map.second)
+            {
+                // If instruction has a label, output that first.
+                if (instr.label != "")
+                    output << instr.label << ':' << std::endl;
+
+                output << BuildAsm(instr.operands) << std::endl;
+            }
+        }
+    }
+
     //---- StackCodeGenerator Implementation ----//
 
-    StackCodeGenerator::StackCodeGenerator(std::ostream& output) :
-        CodeGenerator(output)
+    StackCodeGenerator::StackCodeGenerator()
     {
     }
 
@@ -207,7 +256,7 @@ namespace Compiler
         if (GetDataTypeWords(s.id.dataType) == 2) // If 64-bit data type.
             instr.append(".64");
 
-        WriteAsm({instr, STR(s.id.position)});
+        AddInstruction({instr, STR(s.id.position)});
     }
 
     void StackCodeGenerator::stmt_func_call(const stmt& s)
@@ -220,35 +269,32 @@ namespace Compiler
         const stmt& ifStmt = s.substmts.front();
         const expr& ifCond = ifStmt.expressions.front();
 
-        m_elseLabel = CreateLabel();
-        m_ifLabel = CreateLabel();            
-
-        if (s.substmts.size() == 2 && m_endLabel == "")
-            m_endLabel = CreateLabel();
-        else if (s.substmts.size() == 1 && m_endLabel == "")
-            m_endLabel = m_elseLabel;
-
-        if (s.substmts.size() == 1)
-            m_elseLabel = m_endLabel;
-
         TranslateExpression(ifCond);
+        
+        // Always try to branch directly after the condition expression.
+        int32_t condBranchInstr = AddInstruction({"BRZ"}); // Should jump to else block, or to end, if none exists.
 
-        if (ifCond.type == expr_type::OR && s.substmts.size() == 2)
-            WriteAsm({"JMP", m_elseLabel});
-
-        WriteLabel(m_ifLabel);
+        // Here starts the if block.
 
         auto stmtIt = ifStmt.substmts.begin();
         while (stmtIt != ifStmt.substmts.end())
             TranslateStatement(*stmtIt++);
 
+        int32_t jumpToEnd = -1;
         if (s.substmts.size() == 2)
-            WriteAsm({"JMP", m_endLabel});
-
-        WriteLabel(m_elseLabel);
-
-        if (s.substmts.size() < 2)
+        {
+            jumpToEnd = AddInstruction({"JMP"}); // Should jump to the end.
+            GetFuncInstr(condBranchInstr)->jumpAfter = m_lastInstr; // Should jump to else.
+        }
+        else // Handle when there is no else statement.
+        {
+            // If not already set, then set conditional branch to jump to the 
+            // instruction AFTER the last instruction made, i.e. the end.
+            GetFuncInstr(condBranchInstr)->jumpAfter = m_lastInstr;
             return;
+        }
+
+        // Here starts the else block.
 
         const stmt& elseStmt = s.substmts.back();
 
@@ -256,24 +302,21 @@ namespace Compiler
         while (stmtIt != elseStmt.substmts.end())
             TranslateStatement(*stmtIt++);
 
-        if (m_endLabel != "" && m_lastInstr != m_endLabel)
-            WriteLabel(m_endLabel);
-
-        m_endLabel = "";
-        m_elseLabel = "";
-        m_ifLabel = "";
+        // Set the instruction 'jumpToEnd' to jump to the instruction after the last instruction.
+        // Labels are created and resolved when calling Flush().
+        GetFuncInstr(jumpToEnd)->jumpAfter = m_lastInstr;
     }
 
     void StackCodeGenerator::stmt_creation(const stmt& s)
     {
         TranslateExpression(s.expressions.front());
 
-        WriteAsm({"NEW"});
+        AddInstruction({"NEW"});
 
         if (s.id.type == identifier_type::ARG_VAR)
-            WriteAsm({"STA", STR(s.id.position)});
+            AddInstruction({"STA", STR(s.id.position)});
         else if (s.id.type == identifier_type::LOCAL_VAR)
-            WriteAsm({"STL", STR(s.id.position)});
+            AddInstruction({"STL", STR(s.id.position)});
         else
             RETURN_ERROR();
     }
@@ -282,7 +325,7 @@ namespace Compiler
     {
         TranslateExpression(s.expressions.front());
 
-        WriteAsm({"DEL"});
+        AddInstruction({"DEL"});
     }
 
     void StackCodeGenerator::stmt_return(const stmt& s)
@@ -290,7 +333,7 @@ namespace Compiler
         if (s.expressions.size() > 0)
             TranslateExpression(s.expressions.front());
 
-        WriteAsm({"RET"});
+        AddInstruction({"RET"});
     }
 
 
@@ -310,7 +353,7 @@ namespace Compiler
         if (dataTypeWords == 2) // If 64-bit data type.
             instr.append(".64");
 
-        WriteAsm({instr, STR(e.id.position)});
+        AddInstruction({instr, STR(e.id.position)});
     }
 
     void StackCodeGenerator::expr_id_offset(const expr& e)
@@ -318,20 +361,20 @@ namespace Compiler
         TranslateExpression(e.operands.front());
         TranslateExpression(e.operands.back());
 
-        WriteAsm({"ADD"});
+        AddInstruction({"ADD"});
         
         if (GetDataTypeWords(e.dataType) == 2) // If array of 64-bit values.
-            WriteAsm({"LDM.64"});
+            AddInstruction({"LDM.64"});
         else
-            WriteAsm({"LDM"});
+            AddInstruction({"LDM"});
     }
 
     void StackCodeGenerator::expr_literal(const expr& e)
     {
         if (e.dataType == DataType::INT)
-            WriteAsm({"LDI", STR(e.intValue)});
+            AddInstruction({"LDI", STR(e.intValue)});
         else if (e.dataType == DataType::LONG)
-            WriteAsm({"LDI.64", STR(e.longValue)});
+            AddInstruction({"LDI.64", STR(e.longValue)});
         else
             RETURN_ERROR();
     }
@@ -353,7 +396,7 @@ namespace Compiler
         else if (e.dataType == DataType::DOUBLE) instr.append(".F64");
         else if (e.dataType == DataType::LONG)   instr.append(".64");
 
-        WriteAsm({instr});
+        AddInstruction({instr});
     }
 
     void StackCodeGenerator::expr_comparison(const expr& e)
@@ -374,34 +417,20 @@ namespace Compiler
         else if (e.dataType == DataType::DOUBLE) instr.append(".F64");
         else if (e.dataType == DataType::LONG)   instr.append(".64");
         
-        WriteAsm({instr});
+        AddInstruction({instr});
     }
 
     void StackCodeGenerator::expr_logical(const expr& e)
     {
         TranslateExpression(e.operands.front());
-
-        if (e.type == expr_type::OR && m_ifLabel != "" && !GetLastInstrIsBranch()) 
-            WriteAsm({"BRNZ",  m_ifLabel, "; ", __FUNCTION__, "1"});
-        else if (e.type == expr_type::AND && m_elseLabel != "" && !GetLastInstrIsBranch()) 
-            WriteAsm({"BRZ", m_elseLabel, "; ", __FUNCTION__, "2"});
-
         TranslateExpression(e.operands.back());
 
-        if (e.type == expr_type::OR && m_ifLabel != "" && !GetLastInstrIsBranch())
-            WriteAsm({"BRNZ", m_ifLabel, "; ", __FUNCTION__, "3"});
-        else if (e.type == expr_type::AND && m_elseLabel != "" && !GetLastInstrIsBranch())
-            WriteAsm({"BRZ", m_elseLabel, "; ", __FUNCTION__, "4"});
-
-        if (m_elseLabel == "") // If this expr is NOT part of a branch condition.
-        {
-            if (e.type == expr_type::OR)
-                WriteAsm({"OR"});
-            else if (e.type == expr_type::AND)
-                WriteAsm({"AND"});
-            else
-                RETURN_ERROR();
-        }
+        if (e.type == expr_type::OR)
+            AddInstruction({"OR"});
+        else if (e.type == expr_type::AND)
+            AddInstruction({"AND"});
+        else
+            RETURN_ERROR();
     }
 
     void StackCodeGenerator::expr_func_call(const expr& e)
@@ -412,7 +441,7 @@ namespace Compiler
         while (it != args.operands.end())
             TranslateExpression(*it++);
         
-        WriteAsm({"CALL", func.id.id});
+        AddInstruction({"CALL", func.id.id});
     }
 
     void StackCodeGenerator::expr_unary(const expr& e)
@@ -426,13 +455,12 @@ namespace Compiler
         else if (e.dataType == DataType::DOUBLE) instr.append(".F64");
         else if (e.dataType == DataType::LONG)   instr.append(".64");
         
-        WriteAsm({instr});
+        AddInstruction({instr});
     }
 
     //---- RegisterCodeGenerator Implementation ----//
   
-    RegisterCodeGenerator::RegisterCodeGenerator(std::ostream& output) :
-        CodeGenerator(output)
+    RegisterCodeGenerator::RegisterCodeGenerator()
     {
     }
 

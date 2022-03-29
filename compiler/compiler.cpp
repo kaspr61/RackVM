@@ -63,12 +63,13 @@ namespace Compiler
         {
             CodeGenerator* codeGenerator;
             if (m_codeGenType == CodeGenerationType::STACK)
-                codeGenerator = new StackCodeGenerator(std::cout);
+                codeGenerator = new StackCodeGenerator();
             else
-                codeGenerator = new RegisterCodeGenerator(std::cout);
+                codeGenerator = new RegisterCodeGenerator();
 
             // Generate the assembly source.
-            codeGenResult = codeGenerator->TranslateFunctions(m_funcList);
+            if (codeGenResult = codeGenerator->TranslateFunctions(m_funcList))
+                codeGenerator->Flush(std::cout);
 
             delete codeGenerator;
         }

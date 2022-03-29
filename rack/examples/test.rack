@@ -15,14 +15,10 @@ do_stuff()
 main()
 {
     int a;
-    if (1 < 10 or 2 < 20)
+
+    if (1 or 2)
     {
-        a = 100;
+        if (3 or 4 and 1)
+            a = 100;
     }
-    else
-    {
-        a = 200;
-    }
-    
-    a = 400;
 }

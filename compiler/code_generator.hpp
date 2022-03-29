@@ -32,10 +32,34 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <algorithm>
 #include "types.hpp"
 
 namespace Compiler
 {
+    struct Instruction
+    {
+        std::vector<std::string> operands;
+        int32_t jumpTo;     // > -1 if should jump to the given instruction. Index into instructions within the function.
+        int32_t jumpAfter;  // > -1 if should jump to the instruction directly after the given instruction.
+        std::string label;                            // "" if there is no label.
+        bool done;
+
+        Instruction() : 
+            Instruction(std::vector<std::string>())
+        {
+        }
+
+        Instruction(std::vector<std::string>&& operands) : 
+            operands(std::move(operands)),
+            jumpTo(-1),
+            jumpAfter(-1),
+            label(""),
+            done(false)
+        {
+        }
+    };
+
     ////======== CodeGenerator ========////
 
     // This class serves as the base class for RegisterCodeGenerator and 
@@ -44,11 +68,12 @@ namespace Compiler
     {
     private:
         std::stringstream m_ss;
-        int32_t m_nextLabel;
-        std::ostream& m_out;
+        int64_t m_nextLabel;
+        std::map<std::string, std::vector<Instruction>> m_instr; // Contains a map of function ids and their instructions.
+        std::string m_currFunc;
 
     public:
-        CodeGenerator(std::ostream& output);
+        CodeGenerator();
         virtual ~CodeGenerator();
 
         bool TranslateFunctions(const std::vector<func>& funcList);
@@ -60,6 +85,9 @@ namespace Compiler
         // Translates the given expression recursively, and outputs 
         // the resulting assembly code into m_out.
         bool TranslateExpression(const expr& expr);
+
+        // Creates, and resolves labels, and flushes all instructions to the given output stream.
+        void Flush(std::ostream& output);
 
     private:
         virtual void stmt_assignment(const stmt& s) = 0;
@@ -79,7 +107,7 @@ namespace Compiler
         virtual void expr_unary(const expr& e) = 0;
 
         // Builds a single assembly instruction as a string, based on the given operands.
-        std::string BuildAsm(std::initializer_list<std::string>& operands);
+        std::string BuildAsm(const std::vector<std::string>& operands);
 
         template<typename ...T>
         inline void Error(const T&... args)
@@ -91,31 +119,28 @@ namespace Compiler
 
     protected:
         bool m_hasError;
-        std::string m_elseLabel;
-        std::string m_endLabel;
-        std::string m_lastInstr;
-        std::string m_ifLabel;
+        int32_t m_lastInstr; // Index of the last instruction added to the current function.
 
         inline std::string CreateLabel()
         {
-            return ".L" + std::to_string(m_nextLabel++);
+            return "_L" + std::to_string(m_nextLabel++);
         }
 
-        inline void WriteAsm(std::initializer_list<std::string>&& operands)
+        inline int32_t AddInstruction(std::vector<std::string>&& operands)
         {
-            m_lastInstr = *operands.begin();
-            m_out << BuildAsm(operands) << std::endl;
+            auto& instructions = m_instr.at(m_currFunc);
+            instructions.push_back(std::move(operands));
+            m_lastInstr = static_cast<int32_t>(instructions.size() - 1);
+            return m_lastInstr;
         }
 
-        inline void WriteLabel(const std::string& label)
+        inline Instruction* GetFuncInstr(int32_t index)
         {
-            m_lastInstr = label;
-            m_out << label << ':' << std::endl;
-        }
+            auto& instructions = m_instr.at(m_currFunc);
+            if (index < 0 || index >= instructions.size())
+                return nullptr;
 
-        inline bool GetLastInstrIsBranch() const
-        {
-            return m_lastInstr == "BRZ" || m_lastInstr == "BRNZ";
+            return &instructions[index];
         }
     };
 
@@ -123,8 +148,9 @@ namespace Compiler
     class StackCodeGenerator : public CodeGenerator
     {
     public:
-        StackCodeGenerator(std::ostream& output);
+        StackCodeGenerator();
         ~StackCodeGenerator();
+
     private:
         virtual void stmt_assignment(const stmt& s);
         virtual void stmt_func_call(const stmt& s);
@@ -147,7 +173,7 @@ namespace Compiler
     class RegisterCodeGenerator : public CodeGenerator
     {
     public:
-        RegisterCodeGenerator(std::ostream& output);
+        RegisterCodeGenerator();
         ~RegisterCodeGenerator();
 
     private:
