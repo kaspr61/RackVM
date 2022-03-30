@@ -33,6 +33,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 namespace Compiler
 {
+    static constexpr uint32_t DEFAULT_HEAP_SIZE     = 64;     // 64 KiB
+    static constexpr uint32_t DEFAULT_MAX_HEAP_SIZE = 262144; // 256 MiB = 262 144 KiB
+
     //---- CodeGenerator Implementation ----//
 
     CodeGenerator::CodeGenerator() :
@@ -42,6 +45,7 @@ namespace Compiler
         m_currFunc(""),
         m_lastInstr()
         {
+            SetHeapSize(DEFAULT_HEAP_SIZE, DEFAULT_MAX_HEAP_SIZE);
         }
 
     CodeGenerator::~CodeGenerator() 
@@ -182,6 +186,17 @@ namespace Compiler
 
     void CodeGenerator::Flush(std::ostream& output)
     {
+        // First, write the header.
+        if (typeid(*this) == typeid(StackCodeGenerator))
+            output << std::left << std::setw(10) << ".MODE" << std::setw(14) << "Stack" << "; Use the stack instruction set." << std::endl;
+        else
+            output << std::setw(10) << ".MODE" << std::setw(14) << "Register" << "; Use the register instruction set." << std::endl;
+
+        output << std::setw(10) << ".HEAP" << std::setw(14) << m_initHeapSize << "; KiB" << std::endl;
+        output << std::setw(10) << ".HEAP_MAX" << std::setw(14) << m_maxHeapSize << "; KiB" << std::endl;
+        output << std::endl;
+
+        // Start on the actual instructions.
         for (auto& map : m_instr)
         {
             // Do a first pass to add labels to the instructions that
@@ -228,6 +243,12 @@ namespace Compiler
                 output << BuildAsm(instr.operands) << std::endl;
             }
         }
+    }
+
+    void CodeGenerator::SetHeapSize(uint32_t initialSize, uint32_t maxSize)
+    {
+        m_initHeapSize = initialSize != 0 ? initialSize : DEFAULT_HEAP_SIZE;
+        m_maxHeapSize = maxSize != 0 ? maxSize : DEFAULT_MAX_HEAP_SIZE;
     }
 
     //---- StackCodeGenerator Implementation ----//

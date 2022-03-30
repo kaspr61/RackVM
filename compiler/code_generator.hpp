@@ -33,6 +33,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
+#include <typeinfo>
+
 #include "types.hpp"
 
 namespace Compiler
@@ -72,6 +74,9 @@ namespace Compiler
         std::map<std::string, std::vector<Instruction>> m_instr; // Contains a map of function ids and their instructions.
         std::string m_currFunc;
 
+        uint32_t m_initHeapSize; // Expressed in KiB. 1 MiB = 1024 KiB.
+        uint32_t m_maxHeapSize;  // Expressed in KiB. 1 MiB = 1024 KiB.
+
     public:
         CodeGenerator();
         virtual ~CodeGenerator();
@@ -88,6 +93,11 @@ namespace Compiler
 
         // Creates, and resolves labels, and flushes all instructions to the given output stream.
         void Flush(std::ostream& output);
+
+        // Configures the heap size of the resulting compiled program. 
+        // This is encoded into the header of the produced assembly code.
+        // If zero, it will be set to the default.
+        void SetHeapSize(uint32_t initialSize, uint32_t maxSize = 0);
 
     private:
         virtual void stmt_assignment(const stmt& s) = 0;
