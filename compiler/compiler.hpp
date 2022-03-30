@@ -39,6 +39,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "parser.hpp"
 #include "lexer.hpp"
 #include "code_generator.hpp"
+#include "cli_args.hpp"
 
 namespace Compiler
 {
@@ -61,6 +62,9 @@ namespace Compiler
         std::vector<ScopedVars> m_scopes;
         func m_currFunction;
 
+        uint32_t m_heapSize;
+        uint32_t m_maxHeapSize;
+
     public:
         std::string m_file;
         bool m_traceParsing;    // Whether to generate parsing debug traces.
@@ -74,6 +78,7 @@ namespace Compiler
         RackCompiler(CodeGenerationType codeGenType);
 
         int Parse(const std::string& file);
+        void SetHeapSize(uint32_t initialSize, uint32_t maxSize);
 
         void  AddFunc(std::vector<stmt>&& statements);
         void  DeclFunc(DataType dataType, std::string&& id, std::vector<stmt>&& args);

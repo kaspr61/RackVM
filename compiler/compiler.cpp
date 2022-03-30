@@ -34,7 +34,9 @@ namespace Compiler
     RackCompiler::RackCompiler(CodeGenerationType codeGenType) :
         m_traceParsing(false),
         m_currFunction(),
-        m_codeGenType(codeGenType)
+        m_codeGenType(codeGenType),
+        m_heapSize(0),
+        m_maxHeapSize(0)
     {
     }
 
@@ -63,9 +65,9 @@ namespace Compiler
         {
             CodeGenerator* codeGenerator;
             if (m_codeGenType == CodeGenerationType::STACK)
-                codeGenerator = new StackCodeGenerator();
+                codeGenerator = new StackCodeGenerator(m_heapSize, m_maxHeapSize);
             else
-                codeGenerator = new RegisterCodeGenerator();
+                codeGenerator = new RegisterCodeGenerator(m_heapSize, m_maxHeapSize);
 
             // Generate the assembly source.
             if (codeGenResult = codeGenerator->TranslateFunctions(m_funcList))
@@ -75,6 +77,12 @@ namespace Compiler
         }
 
         return parseResult && codeGenResult;
+    }
+
+    void RackCompiler::SetHeapSize(uint32_t initialSize, uint32_t maxSize)
+    {
+        m_heapSize = initialSize;
+        m_maxHeapSize = maxSize;
     }
 
     void RackCompiler::AddFunc(std::vector<stmt>&& statements)
@@ -422,25 +430,71 @@ namespace Compiler
     }
 }
 
-int main(int argc, char* argv[])
+int main(int argc, char** argv)
 {
-    Compiler::RackCompiler compiler(Compiler::RackCompiler::CodeGenerationType::STACK);
-
-    if (argc < 2)
+    if (argc > 8)
     {
-        std::cerr << "Invalid number of arguments" << std::endl;
+        std::cerr << "Too many arguments." << std::endl;
         return EXIT_FAILURE;
     }
 
-    if (argc >= 3)
+    using CLIArgs::ArgType;
+
+    std::initializer_list<CLIArgs::ArgInfo> args = 
     {
-        if (std::strcmp(argv[2], "-t") == 0) // Check for -t flag which enables parser tracing.
-        {
-            compiler.m_traceParsing = true;
-        }
+        {"-r",          ArgType::NONE,  "Sets the code generation mode to 'register'."},
+        {"-s",          ArgType::NONE,  "Sets the code generation mode to 'stack' (default)."},
+        {"--heap",      ArgType::INT,   "Sets initial heap size of the compiled program."},
+        {"--max-heap",  ArgType::INT,   "Sets maximum heap size of the compiled program."},
+    };
+
+    if (argc == 2 && (std::strcmp(argv[1], "-h") == 0 || std::strcmp(argv[1], "--help") == 0))
+    {
+        std::cout << "==== The Original Compiler for Rack and RackVM ====" << std::endl;
+        for (auto it = args.begin(); it != args.end(); ++it)
+            std::cout << "    " << std::left << std::setw(12) << it->id << it->description << std::endl;
+        
+        std::cout << std::endl;
+        return EXIT_SUCCESS;
     }
 
-    std::cout << compiler.Parse(argv[1]) << std::endl;
+    CLIArgs::ArgParser arg(std::move(args));
+    if (!arg.Parse(argc, argv))
+    {
+        std::cerr << "Arguments could not be parsed correctly." << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    bool registerMode = arg.Get("-r", false);
+    bool stackMode    = arg.Get("-s", true);
+    int initHeapSize  = arg.Get("--heap", 0);
+    int maxHeapSize   = arg.Get("--max-heap", 0);
+
+    // File name should be the first argument without a leading '-'.
+    int i;
+    char* fileName;
+    for (i = 1; i < argc; i++)
+    {
+        fileName = argv[i];
+        if (*fileName != '-')
+            break;
+    }
+
+    if (i >= argc)
+    {
+        std::cerr << "No file name specified." << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    auto codeType = Compiler::RackCompiler::CodeGenerationType::STACK;
+    if (registerMode)
+        codeType = Compiler::RackCompiler::CodeGenerationType::REGISTER;
+
+    Compiler::RackCompiler compiler(codeType);
+
+    compiler.SetHeapSize(initHeapSize, maxHeapSize);
+
+    std::cout << compiler.Parse(fileName) << std::endl;
 
     return 0;
 }

@@ -78,7 +78,7 @@ namespace Compiler
         uint32_t m_maxHeapSize;  // Expressed in KiB. 1 MiB = 1024 KiB.
 
     public:
-        CodeGenerator();
+        CodeGenerator(uint32_t initialHeapSize, uint32_t maxHeapSize);
         virtual ~CodeGenerator();
 
         bool TranslateFunctions(const std::vector<func>& funcList);
@@ -158,7 +158,7 @@ namespace Compiler
     class StackCodeGenerator : public CodeGenerator
     {
     public:
-        StackCodeGenerator();
+        StackCodeGenerator(uint32_t initialHeapSize, uint32_t maxHeapSize);
         ~StackCodeGenerator();
 
     private:
@@ -183,7 +183,7 @@ namespace Compiler
     class RegisterCodeGenerator : public CodeGenerator
     {
     public:
-        RegisterCodeGenerator();
+        RegisterCodeGenerator(uint32_t initialHeapSize, uint32_t maxHeapSize);
         ~RegisterCodeGenerator();
 
     private:

@@ -38,14 +38,15 @@ namespace Compiler
 
     //---- CodeGenerator Implementation ----//
 
-    CodeGenerator::CodeGenerator() :
+    CodeGenerator::CodeGenerator(uint32_t initialHeapSize, uint32_t maxHeapSize) :
         m_ss(), 
         m_hasError(false), 
         m_nextLabel(0), 
         m_currFunc(""),
         m_lastInstr()
         {
-            SetHeapSize(DEFAULT_HEAP_SIZE, DEFAULT_MAX_HEAP_SIZE);
+            m_initHeapSize = initialHeapSize != 0 ? initialHeapSize : DEFAULT_HEAP_SIZE;
+            m_maxHeapSize = maxHeapSize != 0 ? maxHeapSize : DEFAULT_MAX_HEAP_SIZE;
         }
 
     CodeGenerator::~CodeGenerator() 
@@ -245,15 +246,10 @@ namespace Compiler
         }
     }
 
-    void CodeGenerator::SetHeapSize(uint32_t initialSize, uint32_t maxSize)
-    {
-        m_initHeapSize = initialSize != 0 ? initialSize : DEFAULT_HEAP_SIZE;
-        m_maxHeapSize = maxSize != 0 ? maxSize : DEFAULT_MAX_HEAP_SIZE;
-    }
-
     //---- StackCodeGenerator Implementation ----//
 
-    StackCodeGenerator::StackCodeGenerator()
+    StackCodeGenerator::StackCodeGenerator(uint32_t initialHeapSize, uint32_t maxHeapSize) :
+        CodeGenerator(initialHeapSize, maxHeapSize)
     {
     }
 
@@ -481,7 +477,8 @@ namespace Compiler
 
     //---- RegisterCodeGenerator Implementation ----//
   
-    RegisterCodeGenerator::RegisterCodeGenerator()
+    RegisterCodeGenerator::RegisterCodeGenerator(uint32_t initialHeapSize, uint32_t maxHeapSize) :
+        CodeGenerator(initialHeapSize, maxHeapSize)
     {
     }
 

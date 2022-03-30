@@ -35,6 +35,7 @@ target_sources(${TARGET_COMPILER}
         code_generator.cpp  code_generator.hpp
         lexer.hpp
         types.hpp
+        include/cli_args.hpp
         ${BISON_RackParser_OUTPUTS}
         ${FLEX_RackLexer_OUTPUTS}
 )
