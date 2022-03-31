@@ -103,20 +103,20 @@ namespace Assembly
 
     struct InstructionData
     {
-        size_t wordSize;
+        size_t byteSize;
         size_t argMax[3];
 
         InstructionData() : 
-            wordSize(1)
+            byteSize(1)
         {
             this->argMax[0] = 0;
             this->argMax[1] = 0;
             this->argMax[2] = 0;
         }
 
-        InstructionData(size_t wordSize, size_t arg1Max=0, size_t arg2Max=0, size_t arg3Max=0)         
+        InstructionData(size_t byteSize, size_t arg1Max=0, size_t arg2Max=0, size_t arg3Max=0)         
         {
-            this->wordSize  = wordSize;
+            this->byteSize  = byteSize;
             this->argMax[0] = arg1Max;
             this->argMax[1] = arg2Max;
             this->argMax[2] = arg3Max;
@@ -149,9 +149,9 @@ namespace Assembly
             return m_translate[opcode](args[0], args[1], args[2]);
         }
 
-	    inline size_t GetInstructionWordSize(const std::string& opcode)
+	    inline size_t GetInstructionByteSize(const std::string& opcode)
         {
-            return m_info[opcode].wordSize;
+            return m_info[opcode].byteSize;
         }
 
 	    inline size_t GetInstructionMaxArgSize(const std::string& opcode, int argIdx)

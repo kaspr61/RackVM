@@ -34,6 +34,14 @@ namespace Assembly
 		// Add 32 registers as labels.
 		for (int i = 0; i < 32; i++)
 			m_labels["R"+std::to_string(i)] = Label(i);
+
+
+		// Add system function labels. The address is in this 
+		// only an index into the system function table of the VM.
+		m_labels.insert({
+			{"__print", Label(0)},
+			{"__input", Label(1)},
+		});
 	}
 
 	bool LabelDictionary::RegisterLabel(const std::string& label, Address value)
@@ -63,7 +71,13 @@ namespace Assembly
 
 	void LabelDictionary::WarnAboutUnusedLabels() const
 	{
-		auto isRegister = [](const std::string& label) { 
+		auto ignore = [](const std::string& label) 
+		{ 
+			// Ignore system function labels, as they are virtual labels.
+			if (label[0] == '_' && label[1] == '_')
+				return true;
+
+			// Ignore registers, they are not labels.
 			if (label[0] == 'R' && label.length() > 1 && std::isdigit(label[1]))
 				return true;
 
@@ -72,7 +86,7 @@ namespace Assembly
 
 		for (auto elem : m_labels)
 		{
-			if (elem.second.refCount == 0 && !isRegister(elem.first))
+			if (elem.second.refCount == 0 && !ignore(elem.first))
 			{
 				std::cout << "Warning: unused label \"" << elem.first << "\"." << std::endl;
 			}
