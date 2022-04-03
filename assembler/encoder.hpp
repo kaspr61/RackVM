@@ -28,83 +28,119 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string>
 #include <unordered_map>
 #include <functional>
+#include <cstring>
 #include "common.hpp"
 
 namespace Assembly 
 {
-    union BinaryInstruction
+    // Instructions are always little-endian.
+    struct BinaryInstruction
     {
-        uint8_t opcode;
-        Word instr4;
-        Word instr8[2];
-        Word instr12[3];
+        uint8_t opcode;     // Opcode is always 1 byte.
+        Word instr[3];      // Operands can be 12 bytes at most.
 
         BinaryInstruction()
+            : opcode(0), instr{0}
         {
-            instr12[0] = 0;
-            instr12[1] = 0;
-            instr12[2] = 0;
+        }
+
+        BinaryInstruction(const BinaryInstruction& other)
+        {
+            opcode = other.opcode;
+            std::memcpy(&(instr[0]), &(other.instr[0]), 12 /*bytes*/);
+        }
+
+        BinaryInstruction(BinaryInstruction&& other)
+        {
+            opcode = std::move(other.opcode);
+            std::memmove(&(instr[0]), &(other.instr[0]), 12 /*bytes*/);
         }
 
         // For instructions without arguments.
-        BinaryInstruction(const uint8_t opcode)
+        // Final binary size: 1 byte.
+        BinaryInstruction(uint8_t opcode)
             : BinaryInstruction()
         {
             this->opcode = opcode;
         }
 
         // For instructions with argument: Ra
-        BinaryInstruction(const uint8_t opcode, const Register regA)
+        // Final binary size: 2 bytes.
+        BinaryInstruction(uint8_t opcode, Register regA)
             : BinaryInstruction()
         {
             this->opcode = opcode;
-            instr4 |= (regA << 8) & 0x0000'FF00;
+            instr[0] = regA;
         }
 
         // For instructions with arguments: Ra, Rb
-        BinaryInstruction(const uint8_t opcode, const Register regA, const Register regB)
+        // Final binary size: 3 bytes.
+        BinaryInstruction(uint8_t opcode, Register regA, Register regB)
             : BinaryInstruction()
         {
             this->opcode = opcode;
-            instr4 |= (regA << 8)  & 0x0000'FF00;
-            instr4 |= (regB << 16) & 0x00FF'0000;
+            instr[0] = regA;
+            instr[0] |= (regB << 8)  & 0x0000'FF00;
         }
 
         // For instructions with arguments: Ra, Rb, Rc
-        BinaryInstruction(const uint8_t opcode, const Register regA, const Register regB, const Register regC)
+        // Final binary size: 4 bytes.
+        BinaryInstruction(uint8_t opcode, Register regA, Register regB, Register regC)
             : BinaryInstruction()
         {
             this->opcode = opcode;
-            instr4 |= (regA << 8)  & 0x0000'FF00;
-            instr4 |= (regB << 16) & 0x00FF'0000;
-            instr4 |= (regC << 24) & 0xFF00'0000;
+            instr[0] = regA;
+            instr[0] |= (regB << 8)  & 0x0000'FF00;
+            instr[0] |= (regC << 16)  & 0x00FF'0000;
         }
 
         // For instructions with arguments: Ra, 32-bit C
-        BinaryInstruction(const uint8_t opcode, const Register regA, const uint32_t C)
+        // Final binary size: 6 bytes.
+        BinaryInstruction(uint8_t opcode, Register regA, uint32_t C)
             : BinaryInstruction()
         {
             this->opcode = opcode;
-            instr8[0] |= (regA << 8)  & 0x0000'FF00;
-            instr8[1] = C;
+            instr[0] = regA;
+            instr[0] |= (C << 8)  & 0xFFFF'FF00; // Write 3/4 bytes of C.
+            instr[1] = (C & 0xFF00'0000) >> 24;  // Write the remaining byte of C.
         }
 
-        // For instructions with arguments: Ra, 64-bit C
-        BinaryInstruction(const uint8_t opcode, const Register regA, const uint64_t C)
+        // For instructions with arguments: Ra, 64-bit C.
+        // Final binary size: 10 bytes.
+        BinaryInstruction(uint8_t opcode, Register regA, uint64_t C)
             : BinaryInstruction()
         {
             this->opcode = opcode;
-            instr12[0] |= (regA << 8)  & 0x0000'FF00;
-            
-            // Use memcpy to write over multiple elements.
-            ::memcpy(&(instr12[1]), (const void*)C, sizeof(uint64_t)); 
+            instr[0] = regA;
+            instr[0] |= (C << 8)  & 0xFFFF'FF00;          // Write 3/8 bytes of C.
+            instr[1] = (C & 0x00FF'FFFF'FF00'0000) >> 24; // Write the remaining 4/5 bytes of C.
+            instr[2] = (C & 0xFF00'0000'0000'0000) >> 56; // Write the remaining byte of C.
+        }
+
+        // For instructions with arguments: C
+        // Final binary size: 5 bytes.
+        BinaryInstruction(uint8_t opcode, uint32_t C)
+            : BinaryInstruction()
+        {
+            this->opcode = opcode;
+            instr[0] = C;
+        }
+
+        // For instructions with arguments: C
+        // Final binary size: 9 bytes.
+        BinaryInstruction(uint8_t opcode, uint64_t C)
+            : BinaryInstruction()
+        {
+            this->opcode = opcode;
+            instr[0] = (C & 0x0000'0000'FFFF'FFFF);       // Write 4/8 bytes of C.
+            instr[1] = (C & 0xFFFF'FFFF'0000'0000) >> 32; // Write the remaining 4 bytes of C.
         }
     };
 
     struct InstructionData
     {
         size_t byteSize;
-        size_t argMax[3];
+        uint64_t argMax[3];
 
         InstructionData() : 
             byteSize(1)
@@ -114,7 +150,7 @@ namespace Assembly
             this->argMax[2] = 0;
         }
 
-        InstructionData(size_t byteSize, size_t arg1Max=0, size_t arg2Max=0, size_t arg3Max=0)         
+        InstructionData(size_t byteSize, uint64_t arg1Max=0, uint64_t arg2Max=0, uint64_t arg3Max=0)         
         {
             this->byteSize  = byteSize;
             this->argMax[0] = arg1Max;
@@ -149,18 +185,8 @@ namespace Assembly
             return m_translate[opcode](args[0], args[1], args[2]);
         }
 
-	    inline size_t GetInstructionByteSize(const std::string& opcode)
-        {
-            return m_info[opcode].byteSize;
-        }
-
-	    inline size_t GetInstructionMaxArgSize(const std::string& opcode, int argIdx)
-        {
-            if (argIdx > 3)
-                return 0;
-
-            return m_info[opcode].argMax[argIdx];
-        }
-
+	    size_t GetInstructionByteSize(const std::string& opcode) const;
+	    uint64_t GetInstructionMaxArgSize(const std::string& opcode, int argIdx) const;
+	    size_t GetInstructionArgCount(const std::string& opcode) const;
     };
 }

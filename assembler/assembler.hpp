@@ -71,20 +71,12 @@ namespace Assembly
         bool m_hasError;
         size_t m_lastError;
         size_t m_lineNbr;
-        Address m_instrAddr;            // Instruction addresses are all in word-space (4 bytes per word).
+        Address m_instrAddr;            // Instruction addresses are all in bytes.
         AssemblerFlags m_flags;
         std::stringstream workingText;
         BinaryHeader m_binHeader;
         LabelDictionary m_labelDict;
-
-        std::string ToLowerCase(const std::string& str) const;
-        std::string RemoveWhitespace(const std::string& str) const;
-        size_t GetInstructionSize(const std::string& opcode, uint64_t arg0) const;
-        BinaryInstruction TranslateInstruction(const std::string& opcode, uint64_t* args) const;
-        uint32_t EvaluateArgument(const std::string& arg);
-        void ExecAssemblerDirective(const std::string& directive, const std::string* args);
-        void FirstPassReadLine(std::string& line);
-        void AssembleLine(std::string& line, std::iostream& binaryOutput);
+        InstructionEncoder m_encoder;
 
     public:
         Assembler();
@@ -96,6 +88,17 @@ namespace Assembly
 
         // If no flags are set, the assembler will show all errors and warnings by default.
         inline void SetFlags(AssemblerFlags flags) { m_flags = flags; }
+
+    private:
+        std::string ToLowerCase(const std::string& str) const;
+        std::string RemoveWhitespace(const std::string& str) const;
+        void PrintMemory(void* address, size_t byteCount) const;
+        BinaryInstruction TranslateInstruction(const std::string& opcode, uint64_t* args);
+        uint32_t EvaluateArgument(const std::string& arg);
+        void ExecAssemblerDirective(const std::string& directive, const std::string* args);
+        void FirstPassReadLine(std::string& line);
+        void AssembleLine(std::string& line, std::iostream& binaryOutput);
+
     };
 
 }

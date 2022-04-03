@@ -73,8 +73,8 @@ namespace Assembly
 	{
 		auto ignore = [](const std::string& label) 
 		{ 
-			// Ignore system function labels, as they are virtual labels.
-			if (label[0] == '_' && label[1] == '_')
+			// Ignore system function labels, as they are virtual labels. (Also main).
+			if (label[0] == '_' && label[1] == '_' || label == "main")
 				return true;
 
 			// Ignore registers, they are not labels.

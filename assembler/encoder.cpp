@@ -92,24 +92,24 @@ namespace Assembly
     DECL_REG_INSTR3(0x00, ADDI_64,  Register,   Register,   uint64_t)
 
     //---- Stack-only instructions ----//
-    DECL_STACK_INSTR1(0x00, LDI,        uint32_t)
-    DECL_STACK_INSTR1(0x00, LDI_64,     uint64_t)
-    DECL_STACK_INSTR0(0x00, STM                 )
-    DECL_STACK_INSTR0(0x00, STM_64              )
-    DECL_STACK_INSTR1(0x00, STMI,       uint32_t)
-    DECL_STACK_INSTR1(0x00, STMI_64,    uint64_t)
-    DECL_STACK_INSTR0(0x00, LDM                 )
-    DECL_STACK_INSTR0(0x00, LDM_64              )
-    DECL_STACK_INSTR1(0x00, LDMI,       uint32_t)
-    DECL_STACK_INSTR1(0x00, LDMI_64,    uint64_t)
-    DECL_STACK_INSTR1(0x00, LDL,        uint8_t )
-    DECL_STACK_INSTR1(0x00, LDL_64,     uint8_t )
-    DECL_STACK_INSTR1(0x00, LDA,        uint8_t )
-    DECL_STACK_INSTR1(0x00, LDA_64,     uint8_t )
-    DECL_STACK_INSTR1(0x00, STL,        uint8_t )
-    DECL_STACK_INSTR1(0x00, STL_64,     uint8_t )
-    DECL_STACK_INSTR1(0x00, STA,        uint8_t )
-    DECL_STACK_INSTR1(0x00, STA_64,     uint8_t )
+    DECL_STACK_INSTR1(0x01, LDI,        uint32_t)
+    DECL_STACK_INSTR1(0x02, LDI_64,     uint64_t)
+    DECL_STACK_INSTR0(0x03, STM                 )
+    DECL_STACK_INSTR0(0x04, STM_64              )
+    DECL_STACK_INSTR1(0x05, STMI,       uint32_t)
+    DECL_STACK_INSTR1(0x06, STMI_64,    uint64_t)
+    DECL_STACK_INSTR0(0x07, LDM                 )
+    DECL_STACK_INSTR0(0x08, LDM_64              )
+    DECL_STACK_INSTR1(0x09, LDMI,       uint32_t)
+    DECL_STACK_INSTR1(0x0A, LDMI_64,    uint64_t)
+    DECL_STACK_INSTR1(0x0B, LDL,        uint8_t )
+    DECL_STACK_INSTR1(0x0C, LDL_64,     uint8_t )
+    DECL_STACK_INSTR1(0x0D, LDA,        uint8_t )
+    DECL_STACK_INSTR1(0x0E, LDA_64,     uint8_t )
+    DECL_STACK_INSTR1(0x0F, STL,        uint8_t )
+    DECL_STACK_INSTR1(0x10, STL_64,     uint8_t )
+    DECL_STACK_INSTR1(0x11, STA,        uint8_t )
+    DECL_STACK_INSTR1(0x12, STA_64,     uint8_t )
 
     DECL_STACK_INSTR0(0x00, ADD                 )
     DECL_STACK_INSTR0(0x00, ADD_64              )
@@ -292,9 +292,9 @@ namespace Assembly
             LOAD_STACK_INSTR ("BRZ",     BRZ,        5,       UINT32_MAX);
             LOAD_STACK_INSTR ("BRNZ",    BRNZ,       5,       UINT32_MAX);
             LOAD_STACK_INSTR ("JMP",     JMP,        5,       UINT32_MAX);
-            LOAD_STACK_INSTR0("BRIZ",    BRIZ,       1,                 );
-            LOAD_STACK_INSTR0("BRINZ",   BRINZ,      1,                 );
-            LOAD_STACK_INSTR0("JMPI",    JMPI,       1,                 );
+            LOAD_STACK_INSTR0("BRIZ",    BRIZ,       1                  );
+            LOAD_STACK_INSTR0("BRINZ",   BRINZ,      1                  );
+            LOAD_STACK_INSTR0("JMPI",    JMPI,       1                  );
             // Other stuff
             LOAD_STACK_INSTR0("NEW",     NEW,        1                  );
             LOAD_STACK_INSTR0("DEL",     DEL,        1                  );
@@ -305,4 +305,38 @@ namespace Assembly
             LOAD_STACK_INSTR0("RET",     RET,        1                  );
         }
     }
+
+    size_t InstructionEncoder::GetInstructionByteSize(const std::string& opcode) const
+    {
+        auto it = m_info.find(opcode);
+        if (it == m_info.end())
+            return 0;
+
+        return it->second.byteSize;
+    }
+
+    uint64_t InstructionEncoder::GetInstructionMaxArgSize(const std::string& opcode, int argIdx) const
+    {
+        if (argIdx >= 3)
+            return 0;
+
+        auto it = m_info.find(opcode);
+        if (it == m_info.end())
+            return 0;
+
+        return it->second.argMax[argIdx];
+    }
+
+    size_t InstructionEncoder::GetInstructionArgCount(const std::string& opcode) const
+    {
+        auto it = m_info.find(opcode);
+        if (it == m_info.end())
+            return 0;
+
+        size_t cnt;
+        for (cnt = 0; cnt < 3 && it->second.argMax[cnt] > 0; cnt++);
+
+        return cnt;
+    }
+
 }

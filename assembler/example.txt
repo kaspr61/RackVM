@@ -1,6 +1,6 @@
 .MODE       Register    ; Instructs the VM use the register instruction set.
-.HEAP       4096        ; Start with 4 KiB heap size
-.HEAP_MAX   67 108 864  ; 64 MiB. Overflows will terminate the program at runtime.
+.HEAP       64          ; Start with 64 KiB heap size
+.HEAP_MAX   262 144     ; 256 MiB. Overflows will terminate the program at runtime.
 
 // Execution starts here.
       JMP     init                  // Start by jumping to init.
@@ -23,15 +23,10 @@ main:  // Entry point.
       ADD     R0,     R1,     R2
       SUB     R0,     R1,     R2    ; Subtract
 
-      LDA     R10,    str1          ; Load address of "str1" into R10
-      LDP     R11,    static_int    ; Load value of "static_int" into R11
-      LDP.F   R12,    static_float  ; Load value of "static_float" into R12
-      LDP.F64 R14,    static_double ; Load value of "static_double" into R14
-
 // Data
 
-str1:             .WORD 4, "Hello, there"   ; Strings are implicitly zero-terminated.
-str2:             .WORD 2, "Example"        ; The first argument specifies how many words to allocate.
-static_int:       .WORD 1, 1024
-static_float:     .WORD 1, 4.81f            ; Float must be suffixed with 'f', otherwise
-static_double:    .WORD 2, 4.81             ; they are interpreted as doubles, which are 2 words.
+str1:             .BYTE 13, "Hello, there"   ; Strings are zero-terminated, but you must still include it in the size.
+str2:             .BYTE 8,  "Example"        ; The first argument specifies how many bytes to allocate.
+static_int:       .BYTE 4,  1024
+static_float:     .BYTE 4,  4.81f            ; Float must be suffixed with 'f', otherwise
+static_double:    .BYTE 8,  4.81             ; they are interpreted as doubles, which are 8 bytes words.
