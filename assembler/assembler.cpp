@@ -489,8 +489,9 @@ namespace Assembly {
                 '|' << std::setw(36) << finalTranslation.str(); 
             std::cout << "(";
 
-            for (uint8_t* ptr = (uint8_t*)result.instr + instrBytes - 1; ptr >= (uint8_t*)result.instr; --ptr)
-                printf("%02hhX ", *ptr);
+            uint8_t* ptr = (uint8_t*)result.instr + instrBytes - 1;
+            while (ptr > (uint8_t*)result.instr)
+                printf("%02hhX ", *--ptr);
 
             printf("%02hhX", result.opcode);
             std::cout << ")" << std::endl;
