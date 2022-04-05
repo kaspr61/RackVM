@@ -169,6 +169,8 @@ namespace Assembly
     DECL_STACK_INSTR0(0x00, CPLQ_64             )
     DECL_STACK_INSTR0(0x00, CPLQ_F              )
     DECL_STACK_INSTR0(0x00, CPLQ_F64            )
+    DECL_STACK_INSTR0(0x00, CPSTR               )
+    DECL_STACK_INSTR0(0x00, CPCHR               )
     DECL_STACK_INSTR1(0x00, BRZ,        uint32_t)
     DECL_STACK_INSTR1(0x00, BRNZ,       uint32_t)
     DECL_STACK_INSTR1(0x00, JMP,        uint32_t)
@@ -176,13 +178,37 @@ namespace Assembly
     DECL_STACK_INSTR0(0x00, BRINZ               )
     DECL_STACK_INSTR0(0x00, JMPI                )
 
+    DECL_STACK_INSTR0(0x00, ITOL                )
+    DECL_STACK_INSTR0(0x00, ITOF                )
+    DECL_STACK_INSTR0(0x00, ITOD                )
+    DECL_STACK_INSTR0(0x00, ITOS                )
+    DECL_STACK_INSTR0(0x00, LTOI                )
+    DECL_STACK_INSTR0(0x00, LTOF                )
+    DECL_STACK_INSTR0(0x00, LTOD                )
+    DECL_STACK_INSTR0(0x00, LTOS                )
+    DECL_STACK_INSTR0(0x00, FTOI                )
+    DECL_STACK_INSTR0(0x00, FTOL                )
+    DECL_STACK_INSTR0(0x00, FTOD                )
+    DECL_STACK_INSTR1(0x00, FTOS,       uint8_t )
+    DECL_STACK_INSTR0(0x00, DTOI                )
+    DECL_STACK_INSTR0(0x00, DTOL                )
+    DECL_STACK_INSTR0(0x00, DTOF                )
+    DECL_STACK_INSTR1(0x00, DTOS,       uint8_t )
+    DECL_STACK_INSTR1(0x00, STOI,       uint32_t)
+    DECL_STACK_INSTR1(0x00, STOL,       uint64_t)
+    DECL_STACK_INSTR1(0x00, STOF,       float   )
+    DECL_STACK_INSTR1(0x00, STOD,       double  )
+
     DECL_STACK_INSTR0(0x00, NEW                 )
     DECL_STACK_INSTR0(0x00, DEL                 )
     DECL_STACK_INSTR0(0x00, RESZ                )
     DECL_STACK_INSTR0(0x00, SIZE                )
     DECL_STACK_INSTR1(0x00, CALL,       uint32_t)
-    DECL_STACK_INSTR1(0x00, SCALL,      uint8_t )
     DECL_STACK_INSTR0(0x00, RET                 )
+    DECL_STACK_INSTR1(0x00, SCALL,      uint8_t )
+    DECL_STACK_INSTR1(0x00, SARG,       uint8_t )
+    DECL_STACK_INSTR1(0x00, STR,        uint32_t)
+    DECL_STACK_INSTR1(0x00, STRCPY,     uint32_t)
     //----------------------------------//
 
     InstructionEncoder::InstructionEncoder()
@@ -289,20 +315,46 @@ namespace Assembly
             LOAD_STACK_INSTR0("CPLQ.64", CPLQ_64,    1                  );
             LOAD_STACK_INSTR0("CPLQ.F",  CPLQ_F,     1                  );
             LOAD_STACK_INSTR0("CPLQ.F64",CPLQ_F64,   1                  );
+            LOAD_STACK_INSTR0("CPSTR",   CPSTR,      1                  );
+            LOAD_STACK_INSTR0("CPCHR",   CPCHR,      1                  );
             LOAD_STACK_INSTR ("BRZ",     BRZ,        5,       UINT32_MAX);
             LOAD_STACK_INSTR ("BRNZ",    BRNZ,       5,       UINT32_MAX);
             LOAD_STACK_INSTR ("JMP",     JMP,        5,       UINT32_MAX);
             LOAD_STACK_INSTR0("BRIZ",    BRIZ,       1                  );
             LOAD_STACK_INSTR0("BRINZ",   BRINZ,      1                  );
             LOAD_STACK_INSTR0("JMPI",    JMPI,       1                  );
+            // Conversions
+            LOAD_STACK_INSTR0("ITOL",    ITOL,       1                  );
+            LOAD_STACK_INSTR0("ITOF",    ITOF,       1                  );
+            LOAD_STACK_INSTR0("ITOD",    ITOD,       1                  );
+            LOAD_STACK_INSTR0("ITOS",    ITOS,       1                  );
+            LOAD_STACK_INSTR0("LTOI",    LTOI,       1                  );
+            LOAD_STACK_INSTR0("LTOF",    LTOF,       1                  );
+            LOAD_STACK_INSTR0("LTOD",    LTOD,       1                  );
+            LOAD_STACK_INSTR0("LTOS",    LTOS,       1                  );
+            LOAD_STACK_INSTR0("FTOI",    FTOI,       1                  );
+            LOAD_STACK_INSTR0("FTOL",    FTOL,       1                  );
+            LOAD_STACK_INSTR0("FTOD",    FTOD,       1                  );
+            LOAD_STACK_INSTR ("FTOS",    FTOS,       2,       UINT8_MAX );
+            LOAD_STACK_INSTR0("DTOI",    DTOI,       1                  );
+            LOAD_STACK_INSTR0("DTOL",    DTOL,       1                  );
+            LOAD_STACK_INSTR0("DTOF",    DTOF,       1                  );
+            LOAD_STACK_INSTR ("DTOS",    DTOS,       2,       UINT8_MAX );
+            LOAD_STACK_INSTR ("STOI",    STOI,       5,       UINT32_MAX);
+            LOAD_STACK_INSTR ("STOL",    STOL,       9,       UINT64_MAX);
+            LOAD_STACK_INSTR ("STOF",    STOF,       5,       UINT32_MAX);
+            LOAD_STACK_INSTR ("STOD",    STOD,       9,       UINT64_MAX);
             // Other stuff
             LOAD_STACK_INSTR0("NEW",     NEW,        1                  );
             LOAD_STACK_INSTR0("DEL",     DEL,        1                  );
             LOAD_STACK_INSTR0("RESZ",    RESZ,       1                  );
             LOAD_STACK_INSTR0("SIZE",    SIZE,       1                  );
             LOAD_STACK_INSTR ("CALL",    CALL,       5,       UINT32_MAX);
-            LOAD_STACK_INSTR ("SCALL",   SCALL,      2,       UINT8_MAX );
             LOAD_STACK_INSTR0("RET",     RET,        1                  );
+            LOAD_STACK_INSTR ("SCALL",   SCALL,      2,       UINT8_MAX );
+            LOAD_STACK_INSTR ("SARG",    SARG,       2,       UINT8_MAX );
+            LOAD_STACK_INSTR ("STR",     STR,        5,       UINT32_MAX);
+            LOAD_STACK_INSTR ("STRCPY",  STRCPY,     5,       UINT32_MAX);
         }
     }
 

@@ -135,6 +135,39 @@ namespace Assembly
             instr[0] = (C & 0x0000'0000'FFFF'FFFF);       // Write 4/8 bytes of C.
             instr[1] = (C & 0xFFFF'FFFF'0000'0000) >> 32; // Write the remaining 4 bytes of C.
         }
+
+        // For instructions with arguments: (float) C
+        // Final binary size: 5 bytes.
+        BinaryInstruction(uint8_t opcode, float C)
+            : BinaryInstruction()
+        {
+            union 
+            {
+                float fVal;
+                uint32_t iVal;
+            } reinterpret;
+            reinterpret.fVal = C;
+
+            this->opcode = opcode;
+            instr[0] = reinterpret.iVal;
+        }
+
+        // For instructions with arguments: (double) C
+        // Final binary size: 9 bytes.
+        BinaryInstruction(uint8_t opcode, double C)
+            : BinaryInstruction()
+        {
+            union 
+            {
+                double dVal;
+                uint64_t iVal;
+            } reinterpret;
+            reinterpret.dVal = C;
+
+            this->opcode = opcode;
+            instr[0] = (reinterpret.iVal & 0x0000'0000'FFFF'FFFF);       // Write 4/8 bytes of C.
+            instr[1] = (reinterpret.iVal & 0xFFFF'FFFF'0000'0000) >> 32; // Write the remaining 4 bytes of C.
+        }
     };
 
     struct InstructionData
