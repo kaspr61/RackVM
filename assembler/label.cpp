@@ -35,12 +35,15 @@ namespace Assembly
 		for (int i = 0; i < 32; i++)
 			m_labels["R"+std::to_string(i)] = Label(i);
 
-
 		// Add system function labels. The address is in this 
 		// only an index into the system function table of the VM.
 		m_labels.insert({
 			{"__print", Label(0)},
 			{"__input", Label(1)},
+			{"__write", Label(2)},
+			{"__read",  Label(3)},
+			{"__open",  Label(4)},
+			{"__close", Label(5)},
 		});
 	}
 

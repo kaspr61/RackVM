@@ -36,8 +36,26 @@ namespace Compiler
         m_currFunction(),
         m_codeGenType(codeGenType),
         m_heapSize(0),
-        m_maxHeapSize(0)
+        m_maxHeapSize(0),
+        m_funcList(),
+        m_literals()
     {
+#define SYSFUNC_ARG(dataType) stmt(stmt_type::DECLARATION, identifier(identifier_type::ARG_VAR, DataType::dataType))
+#define SYSFUNC_VARIADIC_ARG() stmt(stmt_type::DECLARATION, identifier(identifier_type::VARIADIC_ARG, DataType::UNDEFINED))
+
+        // Insert hardcoded system function declarations into the list of existing functions.
+        m_funcList.insert(m_funcList.begin(), {
+            func("__print", DataType::UNDEFINED, { SYSFUNC_ARG(STRING), SYSFUNC_VARIADIC_ARG() }),
+            func("__input", DataType::STRING,    {}),
+            func("__write", DataType::UNDEFINED, { SYSFUNC_ARG(INT), SYSFUNC_ARG(STRING) }),
+            func("__read",  DataType::STRING,    { SYSFUNC_ARG(INT) }),
+            func("__open",  DataType::INT,       { SYSFUNC_ARG(STRING), SYSFUNC_ARG(STRING) }),
+            func("__close", DataType::UNDEFINED, { SYSFUNC_ARG(INT) }),
+            func("__str",   DataType::STRING,    { SYSFUNC_ARG(STRING), SYSFUNC_VARIADIC_ARG() })
+        });
+
+#undef SYSFUNC_ARG
+#undef SYSFUNC_VARIADIC_ARG
     }
 
     RackCompiler::~RackCompiler()
@@ -65,13 +83,17 @@ namespace Compiler
         {
             CodeGenerator* codeGenerator;
             if (m_codeGenType == CodeGenerationType::STACK)
-                codeGenerator = new StackCodeGenerator(m_heapSize, m_maxHeapSize);
+                codeGenerator = new StackCodeGenerator(m_heapSize, 
+                                m_maxHeapSize, m_funcList, m_literals);
             else
-                codeGenerator = new RegisterCodeGenerator(m_heapSize, m_maxHeapSize);
+                codeGenerator = new RegisterCodeGenerator(m_heapSize, 
+                                m_maxHeapSize, m_funcList, m_literals);
 
             // Generate the assembly source.
-            if (codeGenResult = codeGenerator->TranslateFunctions(m_funcList))
-                codeGenerator->Flush(std::cout);
+            if (codeGenResult = codeGenerator->TranslateFunctions())
+                codeGenerator->Flush(std::cout); // Flush to .asm file.
+            else
+                codeGenerator->Flush(std::cout); // Flush an error log.
 
             delete codeGenerator;
         }
@@ -155,14 +177,19 @@ namespace Compiler
         throw RackParser::syntax_error(m_location, "Unknown identifier \""+varId+"\".");
     }
 
-    const func& RackCompiler::UseFunc(const std::string& funcId, const std::list<expr>& args) const
+    const func& RackCompiler::UseFunc(const std::string& funcId, const std::vector<expr>& args) const
     {
         const func* function;
         bool funcIdFound = false;
+        std::string funcName = std::string(funcId);
+
+        if (IsSystemFunction(funcId))
+            funcName = "__" + funcId;
+
         auto it = std::find_if(m_funcList.begin(), m_funcList.end(),
             [&](const func& f) 
             {
-                if (f.id.id != funcId)
+                if (f.id.id != funcName)
                     return false;
 
                 funcIdFound = true;
@@ -174,7 +201,7 @@ namespace Compiler
         else
             function = &m_currFunction;
 
-        if (function == nullptr || function->id.id != funcId)
+        if (function == nullptr || function->id.id != funcName)
         {
             if (!funcIdFound)
                 throw RackParser::syntax_error(m_location, "Couldn't find function \""+funcId+"\".");
@@ -183,6 +210,16 @@ namespace Compiler
         }
 
         return *function;
+    }
+
+    void RackCompiler::AddStringLiteral(const std::string& literal)
+    {
+        auto it = m_literals.find(literal);
+        
+        // Not found? Create a new one.
+        if (it == m_literals.end()) {
+            m_literals.emplace(literal, "_S" + std::to_string(m_literals.size()));
+        }
     }
 
     std::string RackCompiler::CheckReturnType(const stmt& retStmt) const
@@ -199,15 +236,32 @@ namespace Compiler
         return "";
     }
 
-    bool RackCompiler::MatchFunctionArgs(const func& fun, const std::list<expr>& args) const
+    bool RackCompiler::MatchFunctionArgs(const func& fun, const std::vector<expr>& args) const
     {   
-        if (fun.args.size() != args.size())
+        if (fun.args.size() == 0 && args.size() == 0)
+            return true;
+        else if (args.size() == 0)
             return false;
 
-        for (auto l : fun.args)
-            for (auto r : args)
-                if (l.id.dataType != r.dataType)
-                    return false;
+        for (size_t i = 0; i < fun.args.size(); ++i)
+        {
+            const stmt& funArg = fun.args[i];
+
+            // Accept 0..* args for a variadic function argument.
+            if (funArg.id.type == identifier_type::VARIADIC_ARG)
+                return true;
+
+            if (i >= args.size())
+                return false;
+            
+            const expr& givenArgs = args[i];
+
+            if (funArg.id.dataType != givenArgs.dataType)
+                return false;
+        }
+
+        if (args.size() > fun.args.size())
+            return false;
 
         return true;
     }
@@ -218,14 +272,14 @@ namespace Compiler
         if (st.expressions.back().dataType != DataType::INT)
             return (std::stringstream() << "Array length must be an int value: " << st.expressions.back().dataType).str();
         
-        // Handle arrays of varying size elements.
-        int32_t dataTypeWords = GetDataTypeWords(ARRAY_TO_BASE(st.id.dataType));
+        // Handle arrays of > 4 byte elements.
+        int32_t dataTypeSize = GetDataTypeBytes(ARRAY_TO_BASE(st.id.dataType));
         expr arrayLen = std::move(st.expressions.back());
         st.expressions.pop_back();
 
-        // If element data type is larger than 1 word, multiply array length by nbr of words.
-        if (dataTypeWords > 1)
-            st.expressions.emplace_back(expr_type::MUL, std::move(arrayLen), expr(dataTypeWords));
+        // If element data type is larger than 4 bytes, multiply array length by nbr of bytes.
+        if (dataTypeSize > 4)
+            st.expressions.emplace_back(expr_type::MUL, std::move(arrayLen), expr(dataTypeSize));
 
         st.expressions.back().CheckType();
         return "";
@@ -308,15 +362,14 @@ namespace Compiler
         {
             case DataType::INT:        os << "int";     break;
             case DataType::LONG:       os << "long";    break;
-            case DataType::CHAR:       os << "char";    break;
             case DataType::FLOAT:      os << "float";   break;
             case DataType::DOUBLE:     os << "double";  break;
             case DataType::STRING:     os << "string";  break;
-            case DataType::INT_ARR:    os << "int+";    break;
-            case DataType::LONG_ARR:   os << "long+";   break;
-            case DataType::FLOAT_ARR:  os << "float+";  break;
-            case DataType::DOUBLE_ARR: os << "double+"; break;
-            case DataType::STRING_ARR: os << "string+"; break;
+            case DataType::INT_ARR:    os << "int[]";    break;
+            case DataType::LONG_ARR:   os << "long[]";   break;
+            case DataType::FLOAT_ARR:  os << "float[]";  break;
+            case DataType::DOUBLE_ARR: os << "double[]"; break;
+            case DataType::STRING_ARR: os << "string[]"; break;
             case DataType::UNDEFINED: 
             default: os << "void";
         }
@@ -344,6 +397,7 @@ namespace Compiler
             case expr_type::AND:    os << "and";    break;
             case expr_type::NEG:    os << "or";     break;
             case expr_type::CALL:   os << "call";   break;
+            case expr_type::STREQ:  os << "starts with";   break;
 
             default: os << "unknown expr_type";     break;
         }
@@ -399,9 +453,11 @@ namespace Compiler
             case expr_type::LEQ:       os << "(" << e.operands.front() << " <= " << e.operands.back() << ")"; break;
             case expr_type::OR:        os << "(" << e.operands.front() << " || " << e.operands.back() << ")"; break;
             case expr_type::AND:       os << "(" << e.operands.front() << " && " << e.operands.back() << ")"; break;
-            case expr_type::NEG:       os << "(-(" << e.operands.front() << ")";                              break;
-            case expr_type::CALL:      os << e.operands.front().id << '(' << 
-                                             BuildCommaListString(e.operands.back().operands) << ')';       break;
+            case expr_type::NEG:       os << "-(" << e.operands.front() << ")";                               break;
+            case expr_type::CAST:      os << e.dataType << "(" << e.operands.front() << ")";                  break;
+            case expr_type::STREQ:     os << "(" << e.operands.front() << " starts with " << e.operands.back() << ")"; break;
+            case expr_type::CALL:      os << e.operands.front().id << '(' << (e.operands.back().operands.size() > 0 ?
+                                             (BuildCommaListString(e.operands.back().operands)) : "") << ')'; break;
 
             default: os << "unknown expr";     break;
         }
@@ -409,21 +465,20 @@ namespace Compiler
         return os;
     }
 
-    int GetDataTypeWords(DataType dataType)
+    int GetDataTypeBytes(DataType dataType)
     {
         switch (dataType)
         {
             case DataType::INT:
-            case DataType::CHAR:
             case DataType::FLOAT:
             case DataType::STRING:
             case DataType::INT_ARR:
             case DataType::LONG_ARR:
             case DataType::FLOAT_ARR:
             case DataType::DOUBLE_ARR:
-            case DataType::STRING_ARR: return 1;
+            case DataType::STRING_ARR: return 4;
             case DataType::LONG:
-            case DataType::DOUBLE:     return 2;
+            case DataType::DOUBLE:     return 8;
         }
 
         return 0;
@@ -432,6 +487,10 @@ namespace Compiler
 
 int main(int argc, char** argv)
 {
+#if defined(_WIN32) || defined(WIN32)
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+
     if (argc > 8)
     {
         std::cerr << "Too many arguments." << std::endl;
@@ -494,7 +553,14 @@ int main(int argc, char** argv)
 
     compiler.SetHeapSize(initHeapSize, maxHeapSize);
 
-    std::cout << compiler.Parse(fileName) << std::endl;
+    try
+    {
+        compiler.Parse(fileName);
+    }
+    catch(const std::exception& e)
+    {
+        std::cerr << e.what() << '\n';
+    }
 
     return 0;
 }

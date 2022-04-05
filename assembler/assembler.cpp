@@ -441,7 +441,7 @@ namespace Assembly {
             {
                 // If it's a string, remove "" characters.
                 parsedArgs[1] = parsedArgs[1].substr(1, parsedArgs[1].length() - 2);
-                binaryOutput.write(parsedArgs[1].c_str() + '\0', instrBytes * 4);
+                binaryOutput.write(parsedArgs[1].c_str() + '\0', sizeArg);
             }
             else if (parsedArgs[1].find('.') != std::string::npos) // If it's floating-point data.
             {

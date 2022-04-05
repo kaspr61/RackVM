@@ -28,6 +28,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef INC_COMPILER_HPP
 #define INC_COMPILER_HPP
 
+#if defined(_WIN32) || defined(WIN32)
+    #include <Windows.h>
+#endif
+
 #include <string>
 #include <cstring>
 #include <fstream>
@@ -56,12 +60,13 @@ namespace Compiler
     private:
         using ScopedVars = std::map<std::string, identifier>;
 
-        RackParser* m_parser;
-        CodeGenerationType m_codeGenType;
-        std::vector<func> m_funcList;
+        RackParser*             m_parser;
+        CodeGenerationType      m_codeGenType;
+        std::vector<func>       m_funcList;
         std::vector<ScopedVars> m_scopes;
+        StringLiteralMap        m_literals;
+        
         func m_currFunction;
-
         uint32_t m_heapSize;
         uint32_t m_maxHeapSize;
 
@@ -84,7 +89,9 @@ namespace Compiler
         void  DeclFunc(DataType dataType, std::string&& id, std::vector<stmt>&& args);
         const identifier& DeclVar(DataType dataType, std::string&& varId, identifier_type idType);
         const identifier& UseVar(std::string&& varId) const;
-        const func& UseFunc(const std::string& funcId, const std::list<expr>& args) const;
+        const func& UseFunc(const std::string& funcId, const std::vector<expr>& args) const;
+        void AddStringLiteral(const std::string& literal);
+
         std::string CheckReturnType(const stmt& retStmt) const;
         std::string CheckArrayCreation(stmt& st);
         
@@ -92,7 +99,7 @@ namespace Compiler
         inline void ExitScope()  { m_scopes.pop_back(); }
 
     private:
-        bool MatchFunctionArgs(const func& fun, const std::list<expr>& args) const;
+        bool MatchFunctionArgs(const func& fun, const std::vector<expr>& args) const;
 
     };
 }

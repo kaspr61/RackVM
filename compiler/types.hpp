@@ -47,7 +47,6 @@ namespace Compiler
         UNDEFINED,
         INT,
         LONG,
-        CHAR,
         FLOAT,
         DOUBLE,
         STRING,
@@ -60,8 +59,42 @@ namespace Compiler
 
     extern std::ostream& operator <<(std::ostream& os, const DataType& dataType);
 
+    enum class expr_type
+    {
+        ID,
+        ID_OFFSET,
+        NUMBER,
+        STRING,
+        ADD,
+        SUB,
+        MUL,
+        DIV,
+        EQ, 
+        NEQ,
+        GT, 
+        LT, 
+        GEQ,
+        LEQ,
+        OR, 
+        AND,
+        NEG,
+        CALL,
+        EXPR_LIST,
+        CAST,
+        STREQ       // Compares the first byte of two string.
+    };
+
+    extern std::ostream& operator <<(std::ostream& os, const expr_type& e);
+
+    inline bool IsArray(DataType type)
+    {
+        return type == DataType::INT_ARR || type == DataType::LONG_ARR ||
+               type == DataType::FLOAT_ARR || type == DataType::DOUBLE_ARR ||
+               type == DataType::STRING_ARR;
+    }
+
     // Returns the size of dataType in words (4 bytes each).
-    extern int GetDataTypeWords(DataType dataType);
+    extern int GetDataTypeBytes(DataType dataType);
 
     inline std::string Msg_ConflictingDataType(DataType lhs, DataType rhs)
     {
@@ -69,9 +102,20 @@ namespace Compiler
                 " <--> " << rhs).str();
     }
 
+    inline std::string Msg_ConflictingAssignDataType(DataType lhs, DataType rhs)
+    {
+        return (std::stringstream() << "Assigned as " << rhs << ", expects " << lhs << ".").str();
+    }
+
+    inline std::string Msg_IllegalExpression(DataType lhs, expr_type eType, DataType rhs)
+    {
+        return (std::stringstream() << "Illegal expression '" << eType << "' for types: " << lhs << 
+                " <--> " << rhs).str();
+    }
+
     inline std::string Msg_ArrayIndexNonInteger(DataType indexDataType)
     {
-        return (std::stringstream() << "Array index must be an integer: was " << indexDataType).str();
+        return (std::stringstream() << "Array index must be an int: was " << indexDataType).str();
     }
 
     template<typename _Iterable>
@@ -96,7 +140,8 @@ namespace Compiler
         std::make_pair(DataType::LONG_ARR, DataType::LONG),
         std::make_pair(DataType::FLOAT_ARR, DataType::FLOAT),
         std::make_pair(DataType::DOUBLE_ARR, DataType::DOUBLE),
-        std::make_pair(DataType::STRING_ARR, DataType::STRING)
+        std::make_pair(DataType::STRING_ARR, DataType::STRING),
+        std::make_pair(DataType::STRING, DataType::STRING)
         };
 
     enum class stmt_type
@@ -114,37 +159,13 @@ namespace Compiler
         RETURN
     };
 
-    enum class expr_type
-    {
-        ID,
-        ID_OFFSET,
-        NUMBER,
-        STRING,
-        ADD,
-        SUB,
-        MUL,
-        DIV,
-        EQ, 
-        NEQ,
-        GT, 
-        LT, 
-        GEQ,
-        LEQ,
-        OR, 
-        AND,
-        NEG,
-        CALL,
-        EXPR_LIST
-    };
-
-    extern std::ostream& operator <<(std::ostream& os, const expr_type& e);
-
     enum class identifier_type
     {
         UNDEFINED,
         LOCAL_VAR,
         ARG_VAR,
-        FUNC_NAME
+        FUNC_NAME,
+        VARIADIC_ARG
     };
 
     extern std::ostream& operator <<(std::ostream& os, const identifier_type& e);
@@ -158,11 +179,18 @@ namespace Compiler
 
         identifier() : 
             type(identifier_type::UNDEFINED), id(), position(0), dataType(DataType::UNDEFINED)
-            {}
+            {
+            }
 
         identifier(identifier_type type, const std::string& id, size_t position, DataType dataType) :
             type(type), id(id), position(position), dataType(dataType) 
-            {}
+            {
+            }
+
+        identifier(identifier_type type, DataType dataType) :
+            type(type), id(), position(0), dataType(dataType) 
+            {
+            }
 
         friend std::ostream& operator <<(std::ostream& os, const identifier& s);
     };
@@ -175,6 +203,26 @@ namespace Compiler
         size_t                   argVarCnt;
         std::vector<stmt>        statements;
         std::vector<stmt>        args;
+
+        func() :
+            id(),
+            returnType(DataType::UNDEFINED),
+            localVarCnt(0),
+            argVarCnt(0),
+            statements{},
+            args{}
+        {
+        }
+
+        func(const std::string& id, DataType retType, std::vector<stmt>&& args) :
+            id(identifier_type::FUNC_NAME, id, 0, retType),
+            returnType(retType),
+            localVarCnt(0),
+            argVarCnt(0),
+            statements{},
+            args(std::move(args))
+        {
+        }
     };
 
     struct expr
@@ -182,6 +230,9 @@ namespace Compiler
         union {
             int32_t     intValue;
             int64_t     longValue;
+            uint8_t     charValue;
+            float       floatValue;
+            double      doubleValue;
         };
 
         std::string strValue;
@@ -190,7 +241,7 @@ namespace Compiler
         expr_type       type;
         DataType        dataType;
         const func*     function;
-        std::list<expr> operands;
+        std::vector<expr> operands;
 
         expr() : dataType(DataType::UNDEFINED) {}
 
@@ -202,7 +253,7 @@ namespace Compiler
         {
         }
 
-        expr(const std::list<expr>& list) :
+        expr(const std::vector<expr>& list) :
             type(expr_type::EXPR_LIST),
             dataType(DataType::UNDEFINED), 
             operands(list)
@@ -244,12 +295,91 @@ namespace Compiler
         {
         }
 
+        expr(const std::string& value) : 
+            type(expr_type::STRING), 
+            dataType(DataType::STRING), 
+            strValue(value) 
+        {
+        }
+
         expr(const func& value) : 
             type(expr_type::ID), 
             dataType(value.returnType), 
             id(value.id), 
             function(&value) 
         {
+        }
+
+        expr(DataType castType, expr&& value) : 
+            type(expr_type::CAST), 
+            dataType(castType), 
+            operands({std::move(value)})
+        {
+        }
+
+        expr(DataType castType, expr&& value, expr&& castArg) : 
+            type(expr_type::CAST), 
+            dataType(castType), 
+            operands({std::move(value), std::move(castArg)})
+        {
+        }
+
+        static bool TryTypeCast(expr& e, DataType toType)
+        {
+            expr& castExpr = e;
+            DataType fromType = e.dataType;
+
+            // Integer promotion.
+            if (fromType == DataType::INT && toType == DataType::LONG)
+            {
+                if (e.type == expr_type::NUMBER) // If e is a literal.
+                {
+                    e.dataType = DataType::LONG;
+                    e.longValue = static_cast<int64_t>(e.intValue);
+                    return true;
+                }
+                else // Not a literal, must do explicit cast expression.
+                {
+                    e = expr(toType, std::move(e));
+                }
+            }
+            else if (fromType == DataType::FLOAT && toType == DataType::DOUBLE)
+            {
+                if (e.type == expr_type::NUMBER) // If e is a literal.
+                {
+                    e.dataType = DataType::DOUBLE;
+                    e.doubleValue = static_cast<double>(e.floatValue);
+                    return true;
+                }
+                else // Not a literal, must do explicit cast expression.
+                {
+                    e = expr(toType, std::move(e));
+                }
+            }
+            else
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        bool TryTypePromotion(expr& lhs, expr& rhs)
+        {
+            DataType ltype = lhs.dataType;
+            DataType rtype = rhs.dataType;
+            if (ltype == DataType::INT && rtype == DataType::LONG)
+            {
+                // Promote lhs to long.
+                return TryTypeCast(lhs, DataType::LONG);
+            }
+            else if (ltype == DataType::LONG && rtype == DataType::INT)
+            {
+                // Promote rhs to long.
+                return TryTypeCast(rhs, DataType::LONG);
+            }
+
+            return false;
         }
 
         std::string CheckType()
@@ -263,6 +393,7 @@ namespace Compiler
             if (dataType == DataType::UNDEFINED)
                 dataType = lhs.dataType;
 
+            // Continue if it has more than 1 operand.
             if (operands.size() < 2)
                 return "";
 
@@ -272,13 +403,40 @@ namespace Compiler
             if (type == expr_type::CALL)
                 return "";
 
+            // Do special checks for the optional type cast parameter.
+            if (type == expr_type::CAST)
+            {
+                return "";
+            }
+
+            // Special case check for comparing first byte of strings
+            if (type == expr_type::STREQ)
+            {
+                if (lhs.dataType != DataType::STRING || rhs.dataType != DataType::STRING)
+                    return "Expression \"starts with\" may only be used with strings.";
+
+                return "";
+            }
+
             // Special case check for array indexing.
             if (type == expr_type::ID_OFFSET)
             {
                 dataType = ARRAY_TO_BASE(lhs.dataType);
+                int elementSize = GetDataTypeBytes(dataType);
 
-                if (rhs.dataType != DataType::INT && rhs.dataType != DataType::LONG)
+                if (rhs.dataType != DataType::INT)
                     return Msg_ArrayIndexNonInteger(rhs.dataType);
+           
+                // Preserve single-byte offsets for strings.
+                // For non-strings, multiply the index by element byte size.
+                if (lhs.dataType != DataType::STRING)
+                {
+                    // If the index is a literal, eaasyy
+                    if (rhs.type == expr_type::NUMBER)
+                        rhs.intValue *= elementSize;
+                    else
+                        rhs = expr(expr_type::MUL, expr((int32_t)elementSize), rhs);
+                }
 
                 return "";
             }
@@ -286,7 +444,32 @@ namespace Compiler
             //---- Detect type for binary expression ----//
 
             if (lhs.dataType != rhs.dataType)
-                return Msg_ConflictingDataType(lhs.dataType, rhs.dataType);
+            {
+                // Always try to promote types (widen the narrow one) if they mismatch. If failed, give error message.
+                if (!TryTypePromotion(lhs, rhs))
+                    return Msg_ConflictingDataType(lhs.dataType, rhs.dataType);
+
+                dataType = lhs.dataType; // lhs and rhs should now have the same data type.
+            }
+
+            // Check for illegal arithmetic expressions.
+            if (lhs.dataType == DataType::STRING || rhs.dataType == DataType::STRING || 
+                IsArray(lhs.dataType) || IsArray(rhs.dataType))
+            {
+                switch (type)
+                {
+                    case expr_type::ADD:
+                    case expr_type::SUB:
+                    case expr_type::MUL:
+                    case expr_type::DIV:
+                    case expr_type::GEQ:
+                    case expr_type::GT:
+                    case expr_type::LEQ:
+                    case expr_type::LT:
+                    case expr_type::AND:
+                    case expr_type::OR: return Msg_IllegalExpression(lhs.dataType, type, rhs.dataType);
+                }
+            }
 
             return "";
         }
@@ -298,7 +481,7 @@ namespace Compiler
     {
         stmt_type         type;
         identifier        id;
-        std::list<expr>   expressions;
+        std::vector<expr> expressions;
         std::vector<stmt> substmts;
 
         stmt() :
@@ -345,7 +528,7 @@ namespace Compiler
         }
 
         // For indexed variable assignment, eg. numbers[5] = ...
-        stmt(stmt_type type, const identifier& id, std::list<expr>&& exprs) :
+        stmt(stmt_type type, const identifier& id, std::vector<expr>&& exprs) :
             type(type), 
             id(id),
             expressions(std::move(exprs)),
@@ -375,25 +558,32 @@ namespace Compiler
         {
             if (type == stmt_type::ASSIGNMENT || type == stmt_type::INITIALIZATION)
             {
-                const expr& value = expressions.front();
+                expr& value = expressions.front();
                 DataType valueDataType = value.dataType;
-                if (value.operands.front().type == expr_type::ID && value.type != expr_type::ID_OFFSET)
-                    valueDataType = value.operands.front().dataType;
+                if (value.operands.size() > 0 && value.type != expr_type::ID_OFFSET && value.type != expr_type::CAST)
+                    if (value.operands.front().type == expr_type::ID)
+                        valueDataType = value.operands.front().dataType;
 
                 if (valueDataType != id.dataType)
-                    return Msg_ConflictingDataType(id.dataType, value.dataType);
+                {
+                    if (!expr::TryTypeCast(value, id.dataType))
+                        return Msg_ConflictingAssignDataType(id.dataType, valueDataType);
+                }
             }
             else if (type == stmt_type::ASSIGN_OFFSET)
             {
                 const expr& index = expressions.front();
-                const expr& value = expressions.back();
+                expr& value = expressions.back();
                 DataType arrType = ARRAY_TO_BASE(id.dataType);
 
                 if (index.dataType != DataType::INT && index.dataType != DataType::LONG)
                     return Msg_ArrayIndexNonInteger(index.dataType);
 
                 if (value.dataType != arrType)
-                    return Msg_ConflictingDataType(arrType, value.dataType);
+                {
+                    if (!expr::TryTypeCast(value, id.dataType))
+                        return Msg_ConflictingAssignDataType(arrType, value.dataType);
+                }
             }
 
             return "";

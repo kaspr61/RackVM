@@ -39,6 +39,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 namespace Compiler
 {
+    using StringLiteralMap = std::map<std::string, std::string>;
+
+    extern bool IsSystemFunction(const std::string& id);
+    extern bool IsVariadicSystemFunction(const func& function);
+
     struct Instruction
     {
         std::vector<std::string> operands;
@@ -78,18 +83,11 @@ namespace Compiler
         uint32_t m_maxHeapSize;  // Expressed in KiB. 1 MiB = 1024 KiB.
 
     public:
-        CodeGenerator(uint32_t initialHeapSize, uint32_t maxHeapSize);
+        CodeGenerator(uint32_t initialHeapSize, uint32_t maxHeapSize, 
+            const std::vector<func>& funcList, const StringLiteralMap& literals);
         virtual ~CodeGenerator();
 
-        bool TranslateFunctions(const std::vector<func>& funcList);
-
-        // Translates the given statement recursively, and outputs 
-        // the resulting assembly code into m_out.
-        bool TranslateStatement(const stmt& stmt);
-
-        // Translates the given expression recursively, and outputs 
-        // the resulting assembly code into m_out.
-        bool TranslateExpression(const expr& expr);
+        bool TranslateFunctions();
 
         // Creates, and resolves labels, and flushes all instructions to the given output stream.
         void Flush(std::ostream& output);
@@ -99,7 +97,15 @@ namespace Compiler
         // If zero, it will be set to the default.
         void SetHeapSize(uint32_t initialSize, uint32_t maxSize = 0);
 
-    private:
+    protected:
+        // Translates the given statement recursively, and outputs 
+        // the resulting assembly code into m_out.
+        bool TranslateStatement(const stmt& stmt);
+
+        // Translates the given expression recursively, and outputs 
+        // the resulting assembly code into m_out.
+        bool TranslateExpression(const expr& expr);
+
         virtual void stmt_assignment(const stmt& s) = 0;
         virtual void stmt_func_call(const stmt& s) = 0;
         virtual void stmt_branch(const stmt& s) = 0;
@@ -115,6 +121,7 @@ namespace Compiler
         virtual void expr_comparison(const expr& e) = 0;
         virtual void expr_func_call(const expr& e) = 0;
         virtual void expr_unary(const expr& e) = 0;
+        virtual void expr_cast(const expr& e) = 0;
 
         // Builds a single assembly instruction as a string, based on the given operands.
         std::string BuildAsm(const std::vector<std::string>& operands);
@@ -130,6 +137,8 @@ namespace Compiler
     protected:
         bool m_hasError;
         int32_t m_lastInstr; // Index of the last instruction added to the current function.
+        const std::vector<func>& m_funcList;
+        const StringLiteralMap&  m_literals;
 
         inline std::string CreateLabel()
         {
@@ -158,7 +167,8 @@ namespace Compiler
     class StackCodeGenerator : public CodeGenerator
     {
     public:
-        StackCodeGenerator(uint32_t initialHeapSize, uint32_t maxHeapSize);
+        StackCodeGenerator(uint32_t initialHeapSize, uint32_t maxHeapSize, 
+            const std::vector<func>& funcList, const StringLiteralMap& literals);
         ~StackCodeGenerator();
 
     private:
@@ -177,13 +187,15 @@ namespace Compiler
         virtual void expr_comparison(const expr& e);
         virtual void expr_func_call(const expr& e);
         virtual void expr_unary(const expr& e);
+        virtual void expr_cast(const expr& e);
     };
 
     ////======== RegisterCodeGenerator ========////
     class RegisterCodeGenerator : public CodeGenerator
     {
     public:
-        RegisterCodeGenerator(uint32_t initialHeapSize, uint32_t maxHeapSize);
+        RegisterCodeGenerator(uint32_t initialHeapSize, uint32_t maxHeapSize, 
+            const std::vector<func>& funcList, const StringLiteralMap& literals);
         ~RegisterCodeGenerator();
 
     private:
@@ -202,6 +214,7 @@ namespace Compiler
         virtual void expr_comparison(const expr& e);
         virtual void expr_func_call(const expr& e);
         virtual void expr_unary(const expr& e);
+        virtual void expr_cast(const expr& e);
     };
 
 }

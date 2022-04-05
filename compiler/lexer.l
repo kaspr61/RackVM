@@ -48,12 +48,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     Compiler::RackParser::symbol_type
     make_STR_LIT (const std::string &s, const Compiler::RackParser::location_type& loc);
 
+    Compiler::RackParser::symbol_type
+    make_CHARACTER (const std::string &s, const Compiler::RackParser::location_type& loc);
+
     void multiln_comment_add_lines(char* str, Compiler::RackParser::location_type& loc);
 
 %}
 
 id          [a-zA-Z][a-zA-Z_0-9]*
-num         [0-9]+
+num         [-]?[0-9]+
 str         [\"][^\"\n]*[\"]
 blank       [ \t\r]
 
@@ -78,48 +81,49 @@ blank       [ \t\r]
 {blank}+    loc.step();
 \n+         loc.lines(yyleng); loc.step();
 
-"="         return Compiler::RackParser::make_ASSIGN(loc);
-"+"         return Compiler::RackParser::make_PLUS(loc);
-"-"         return Compiler::RackParser::make_MINUS(loc);
-"*"         return Compiler::RackParser::make_MULT(loc);
-"/"         return Compiler::RackParser::make_DIV(loc);
-"("         return Compiler::RackParser::make_L_PAR(loc);
-")"         return Compiler::RackParser::make_R_PAR(loc);
-"is not"    return Compiler::RackParser::make_NEQ(loc);       
-"not"       return Compiler::RackParser::make_NOT(loc);       
-"equals"    return Compiler::RackParser::make_EQ(loc);        
-"is"        return Compiler::RackParser::make_EQ(loc);        
-"or"        return Compiler::RackParser::make_OR(loc);       
-"and"       return Compiler::RackParser::make_AND(loc);       
-"is above"  return Compiler::RackParser::make_GT(loc);       
-"is below"  return Compiler::RackParser::make_LT(loc);       
-">"         return Compiler::RackParser::make_GT(loc);        
-"<"         return Compiler::RackParser::make_LT(loc);        
-">="        return Compiler::RackParser::make_GEQ(loc);       
-"<="        return Compiler::RackParser::make_LEQ(loc);       
-"{"         return Compiler::RackParser::make_L_CURL(loc);    
-"}"         return Compiler::RackParser::make_R_CURL(loc);    
-"["         return Compiler::RackParser::make_L_SQ(loc);    
-"]"         return Compiler::RackParser::make_R_SQ(loc);    
-";"         return Compiler::RackParser::make_SEMICOLON(loc);
-","         return Compiler::RackParser::make_COMMA(loc);
+"="           return Compiler::RackParser::make_ASSIGN(loc);
+"+"           return Compiler::RackParser::make_PLUS(loc);
+"-"           return Compiler::RackParser::make_MINUS(loc);
+"*"           return Compiler::RackParser::make_MULT(loc);
+"/"           return Compiler::RackParser::make_DIV(loc);
+"("           return Compiler::RackParser::make_L_PAR(loc);
+")"           return Compiler::RackParser::make_R_PAR(loc);
+"is not"      return Compiler::RackParser::make_NEQ(loc);       
+"not"         return Compiler::RackParser::make_NOT(loc);       
+"equals"      return Compiler::RackParser::make_EQ(loc);        
+"is"          return Compiler::RackParser::make_EQ(loc);        
+"or"          return Compiler::RackParser::make_OR(loc);       
+"and"         return Compiler::RackParser::make_AND(loc);       
+"is above"    return Compiler::RackParser::make_GT(loc);       
+"is below"    return Compiler::RackParser::make_LT(loc);       
+">"           return Compiler::RackParser::make_GT(loc);        
+"<"           return Compiler::RackParser::make_LT(loc);        
+">="          return Compiler::RackParser::make_GEQ(loc);       
+"<="          return Compiler::RackParser::make_LEQ(loc);       
+"{"           return Compiler::RackParser::make_L_CURL(loc);    
+"}"           return Compiler::RackParser::make_R_CURL(loc);    
+"["           return Compiler::RackParser::make_L_SQ(loc);    
+"]"           return Compiler::RackParser::make_R_SQ(loc);    
+";"           return Compiler::RackParser::make_SEMICOLON(loc);
+","           return Compiler::RackParser::make_COMMA(loc);
+"starts with" return Compiler::RackParser::make_STREQ(loc);
 
-"if"        return Compiler::RackParser::make_IF(loc);
-"else"      return Compiler::RackParser::make_ELSE(loc);
-"while"     return Compiler::RackParser::make_WHILE(loc);
-"int"       return Compiler::RackParser::make_INT(loc);
-"long"      return Compiler::RackParser::make_LONG(loc);
-"char"      return Compiler::RackParser::make_CHAR(loc);
-"float"     return Compiler::RackParser::make_FLOAT(loc);
-"double"    return Compiler::RackParser::make_DOUBLE(loc);
-"string"    return Compiler::RackParser::make_STRING(loc);
-"create"    return Compiler::RackParser::make_CREATE(loc);
-"destroy"   return Compiler::RackParser::make_DESTROY(loc);
-"return"    return Compiler::RackParser::make_RETURN(loc);
+"if"          return Compiler::RackParser::make_IF(loc);
+"else"        return Compiler::RackParser::make_ELSE(loc);
+"while"       return Compiler::RackParser::make_WHILE(loc);
+"int"         return Compiler::RackParser::make_INT(loc);
+"long"        return Compiler::RackParser::make_LONG(loc);
+"char"        return Compiler::RackParser::make_CHAR(loc);
+"float"       return Compiler::RackParser::make_FLOAT(loc);
+"double"      return Compiler::RackParser::make_DOUBLE(loc);
+"string"      return Compiler::RackParser::make_STRING(loc);
+"create"      return Compiler::RackParser::make_CREATE(loc);
+"destroy"     return Compiler::RackParser::make_DESTROY(loc);
+"return"      return Compiler::RackParser::make_RETURN(loc);
 
-{id}        return Compiler::RackParser::make_ID(yytext, loc);
-{num}       return make_NUM(yytext, loc);
-{str}       return make_STR_LIT(yytext, loc);
+{id}          return Compiler::RackParser::make_ID(yytext, loc);
+{num}         return make_NUM(yytext, loc);
+{str}         return make_STR_LIT(yytext, loc);
 
 .          {
             throw Compiler::RackParser::syntax_error(loc, 
@@ -145,7 +149,7 @@ make_NUM (const std::string &s, const Compiler::RackParser::location_type& loc)
 Compiler::RackParser::symbol_type
 make_STR_LIT (const std::string &s, const Compiler::RackParser::location_type& loc)
 {
-    return Compiler::RackParser::make_STR(s.substr(1, s.length()-2), loc);
+    return Compiler::RackParser::make_STR(s.substr(1, s.size()-2), loc);
 }
 
 void multiln_comment_add_lines(char* str, Compiler::RackParser::location_type& loc)

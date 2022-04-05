@@ -1,21 +1,31 @@
-int add(int l, int r)
-{
-    int result = l + r;
-    return result;
-}
-
 do_stuff()
 {
-    long[] arr = create 64;
-    long a = arr[1];
+    int idx = 1;
+    long[] a = create 2;
+    long b = a[idx];
 
-    destroy arr;
+    string text = input();
+    print("Hello, %s. %d", text, 5);
+
+    text = "Testing";
+    string s1 = text;               // s1 points to exactly what text points to.
+    string s2 = string(text);       // s2 points to a new string with the content copied from text.
+    string s3 = string(text[1], 5); // s3 points to a new string, with 6 bytes (incl. null), starting from s2[1].
+    string ch = s2[1];
+
+    // s1: "Testing"
+    // s2: "Testing"
+    // s3: "estin"
+    // ch: "esting"
+
+    // "starts with" compares only the first byte of two strings.
+    if (s1 starts with "T") 
+        s1 = "testing";
 }
 
 main()
 {
-    int a;
-
+    int a = 0;
     if (1 or 2)
     {
         if (3 or 4 and 1)

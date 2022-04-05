@@ -36,14 +36,41 @@ namespace Compiler
     static constexpr uint32_t DEFAULT_HEAP_SIZE     = 64;     // 64 KiB
     static constexpr uint32_t DEFAULT_MAX_HEAP_SIZE = 262144; // 256 MiB = 262 144 KiB
 
+    static const std::initializer_list<std::string> g_sysFuncs =
+    {
+        "print",
+        "input",
+        "write",
+        "read",
+        "open",
+        "close",
+        "str"
+    };
+
+    bool IsSystemFunction(const std::string& id)
+    {
+        return std::find(g_sysFuncs.begin(), g_sysFuncs.end(), id) != g_sysFuncs.end();
+    }
+
+    bool HasVariadicArguments(const func& function)
+    {
+        auto varArg = std::find_if(function.args.begin(), function.args.end(), 
+            [](const stmt& arg) { return arg.id.type == identifier_type::VARIADIC_ARG; }); 
+
+        return varArg != function.args.end();
+    }
+
     //---- CodeGenerator Implementation ----//
 
-    CodeGenerator::CodeGenerator(uint32_t initialHeapSize, uint32_t maxHeapSize) :
+    CodeGenerator::CodeGenerator(uint32_t initialHeapSize, uint32_t maxHeapSize, 
+        const std::vector<func>& funcList, const StringLiteralMap& literals) :
         m_ss(), 
         m_hasError(false), 
         m_nextLabel(0), 
         m_currFunc(""),
-        m_lastInstr()
+        m_lastInstr(),
+        m_funcList(funcList),
+        m_literals(literals)
         {
             m_initHeapSize = initialHeapSize != 0 ? initialHeapSize : DEFAULT_HEAP_SIZE;
             m_maxHeapSize = maxHeapSize != 0 ? maxHeapSize : DEFAULT_MAX_HEAP_SIZE;
@@ -53,12 +80,15 @@ namespace Compiler
     {
     }
 
-    bool CodeGenerator::TranslateFunctions(const std::vector<func>& funcList)
+    bool CodeGenerator::TranslateFunctions()
     {
-        auto funcIt = funcList.begin();
-        while (funcIt != funcList.end())
+        for (auto funcIt = m_funcList.begin(); funcIt != m_funcList.end(); ++funcIt)
         {
-            m_currFunc = funcIt->id.id;
+            const std::string& funcName = funcIt->id.id;
+            if (funcName.size() > 2 && funcName[0] == '_' && funcName[1] == '_')
+                continue;
+
+            m_currFunc = funcName;
             m_instr.emplace(m_currFunc, std::vector<Instruction>());
 
             if (funcIt->argVarCnt > 0)
@@ -67,7 +97,7 @@ namespace Compiler
                 // It is important to load them in a reversed order, because... stack.
                 for (auto argIt = funcIt->args.rbegin(); argIt != funcIt->args.rend(); ++argIt)
                 {
-                    if (GetDataTypeWords(argIt->id.dataType) == 2)
+                    if (GetDataTypeBytes(argIt->id.dataType) == 8)
                         AddInstruction({"STA.64", STR(argIt->id.position)});
                     else
                         AddInstruction({"STA", STR(argIt->id.position)});
@@ -80,8 +110,6 @@ namespace Compiler
                 TranslateStatement(*stmtIt++);
 
             m_instr[m_currFunc].front().label = m_currFunc;
-
-            ++funcIt;
         }
 
         return !m_hasError;
@@ -160,7 +188,11 @@ namespace Compiler
             case expr_type::GT:
             case expr_type::LT:
             case expr_type::GEQ:
-            case expr_type::LEQ: expr_comparison(e);
+            case expr_type::LEQ:
+            case expr_type::STREQ: expr_comparison(e);
+                break;
+
+            case expr_type::CAST: expr_cast(e);
                 break;
         }
 
@@ -180,7 +212,13 @@ namespace Compiler
         m_ss << "  " << std::setw(6) << std::left << *it++; // First operand (the mnemonic) has width 6
         
         while (it != operands.end())
-        m_ss << "  " << std::setw(8) << std::left << *it++; // Other operands have width 8
+        {
+            std::string arg = *it++;
+            if (it != operands.end())
+                arg.append(",");
+
+            m_ss << "  " << std::setw(8) << std::left << arg; // Other operands have width 8
+        }
 
         return m_ss.str();
     }
@@ -244,12 +282,22 @@ namespace Compiler
                 output << BuildAsm(instr.operands) << std::endl;
             }
         }
+
+        output << std::endl << "; LITERALS" << std::endl;
+
+        // Create all string literals at the end of the program.
+        for (auto literal : m_literals)
+        {
+            output << literal.second << ':' << std::endl;
+            output << BuildAsm({".BYTE", STR(literal.first.size()+1), '\"'+literal.first+'\"'}) << std::endl;
+        }
     }
 
     //---- StackCodeGenerator Implementation ----//
 
-    StackCodeGenerator::StackCodeGenerator(uint32_t initialHeapSize, uint32_t maxHeapSize) :
-        CodeGenerator(initialHeapSize, maxHeapSize)
+    StackCodeGenerator::StackCodeGenerator(uint32_t initialHeapSize, uint32_t maxHeapSize, 
+        const std::vector<func>& funcList, const StringLiteralMap& literals) :
+        CodeGenerator(initialHeapSize, maxHeapSize, funcList, literals)
     {
     }
 
@@ -270,7 +318,7 @@ namespace Compiler
         else
             RETURN_ERROR();
 
-        if (GetDataTypeWords(s.id.dataType) == 2) // If 64-bit data type.
+        if (GetDataTypeBytes(s.id.dataType) == 8) // If 64-bit data type.
             instr.append(".64");
 
         AddInstruction({instr, STR(s.id.position)});
@@ -357,7 +405,7 @@ namespace Compiler
     void StackCodeGenerator::expr_id(const expr& e)
     {
         identifier_type idType = e.id.type;
-        int32_t dataTypeWords = GetDataTypeWords(e.dataType);
+        int32_t dataTypeSize = GetDataTypeBytes(e.dataType);
         std::string instr;
 
         if (idType == identifier_type::ARG_VAR)
@@ -367,7 +415,7 @@ namespace Compiler
         else
             RETURN_ERROR();
 
-        if (dataTypeWords == 2) // If 64-bit data type.
+        if (dataTypeSize == 8) // If 64-bit data type.
             instr.append(".64");
 
         AddInstruction({instr, STR(e.id.position)});
@@ -376,22 +424,42 @@ namespace Compiler
     void StackCodeGenerator::expr_id_offset(const expr& e)
     {
         TranslateExpression(e.operands.front());
-        TranslateExpression(e.operands.back());
-
-        AddInstruction({"ADD"});
         
-        if (GetDataTypeWords(e.dataType) == 2) // If array of 64-bit values.
-            AddInstruction({"LDM.64"});
-        else
-            AddInstruction({"LDM"});
+        const expr& index = e.operands.back();
+        if (index.intValue > 0 || index.type != expr_type::NUMBER)
+        {
+            TranslateExpression(index);
+            AddInstruction({"ADD"});
+        }
+        
+        // Don't load from mem if it's a string. Strings are just pointers.
+        if (e.operands.front().dataType != DataType::STRING) 
+        {
+            if (GetDataTypeBytes(e.dataType) == 8) // If array of 64-bit values.
+                AddInstruction({"LDM.64"});
+            else
+                AddInstruction({"LDM"});
+        }
     }
 
     void StackCodeGenerator::expr_literal(const expr& e)
     {
         if (e.dataType == DataType::INT)
+        {
             AddInstruction({"LDI", STR(e.intValue)});
+        }
         else if (e.dataType == DataType::LONG)
+        {
             AddInstruction({"LDI.64", STR(e.longValue)});
+        }
+        else if (e.dataType == DataType::STRING)
+        {
+            const auto it = m_literals.find(e.strValue);
+            if (it != m_literals.end())
+                AddInstruction({"STR", it->second});
+            else
+                RETURN_ERROR();
+        }
         else
             RETURN_ERROR();
     }
@@ -421,13 +489,30 @@ namespace Compiler
         TranslateExpression(e.operands.front());
         TranslateExpression(e.operands.back());
 
+        const expr& lhs = e.operands.front();
+        if (lhs.dataType == DataType::STRING)
+        {
+            if (e.operands.back().dataType != DataType::STRING)
+                RETURN_ERROR();
+
+            switch(e.type)
+            {
+                case expr_type::EQ:    AddInstruction({"CPSTR"}); break;
+                case expr_type::NEQ:   AddInstruction({"CPSTR"}); AddInstruction({"CPZ"}); break;
+                case expr_type::STREQ: AddInstruction({"CPCHR"}); break;
+                default:               RETURN_ERROR();
+            }
+
+            return;
+        }
+
         std::string instr;
-        if      (e.type == expr_type::EQ)  instr = "CPEQ";
-        else if (e.type == expr_type::NEQ) instr = "CPNQ";
-        else if (e.type == expr_type::GT)  instr = "CPGT";
-        else if (e.type == expr_type::LT)  instr = "CPLT";
-        else if (e.type == expr_type::GEQ) instr = "CPGQ";
-        else if (e.type == expr_type::LEQ) instr = "CPLQ";
+        if      (e.type == expr_type::EQ)    instr = "CPEQ";
+        else if (e.type == expr_type::NEQ)   instr = "CPNQ";
+        else if (e.type == expr_type::GT)    instr = "CPGT";
+        else if (e.type == expr_type::LT)    instr = "CPLT";
+        else if (e.type == expr_type::GEQ)   instr = "CPGQ";
+        else if (e.type == expr_type::LEQ)   instr = "CPLQ";
         else    RETURN_ERROR();
 
         if      (e.dataType == DataType::FLOAT)  instr.append(".F");
@@ -454,31 +539,153 @@ namespace Compiler
     {
         const expr& func = e.operands.front();
         const expr& args = e.operands.back();
-        auto it = args.operands.begin();
-        while (it != args.operands.end())
-            TranslateExpression(*it++);
-        
-        AddInstruction({"CALL", func.id.id});
+
+        auto funcIt = std::find_if(m_funcList.begin(), m_funcList.end(),
+            [=](const Compiler::func& f) { return f.id.id == func.id.id;});
+
+        bool hasVariadicArgs = false;
+        if (funcIt != m_funcList.end())
+            hasVariadicArgs = HasVariadicArguments(*funcIt);
+
+        for (auto it = args.operands.begin(); it != args.operands.end(); ++it)
+        {
+            TranslateExpression(*it);
+
+            if (hasVariadicArgs)
+                AddInstruction({"SARG", STR(GetDataTypeBytes(it->dataType))});
+        }
+
+        std::string label = func.id.id;
+        if (label[0] = '_' && label[1] == '_')
+            AddInstruction({"SCALL", label});
+        else
+            AddInstruction({"CALL", label});
     }
 
     void StackCodeGenerator::expr_unary(const expr& e)
     {
+        TranslateExpression(e.operands.front());
+        DataType dataType = e.operands.front().dataType;
+
         std::string instr;
 
         if      (e.type == expr_type::NEG) instr = "NEG";
         else    RETURN_ERROR();
 
-        if      (e.dataType == DataType::FLOAT)  instr.append(".F");
-        else if (e.dataType == DataType::DOUBLE) instr.append(".F64");
-        else if (e.dataType == DataType::LONG)   instr.append(".64");
+        if      (dataType == DataType::FLOAT)  instr.append(".F");
+        else if (dataType == DataType::DOUBLE) instr.append(".F64");
+        else if (dataType == DataType::LONG)   instr.append(".64");
         
         AddInstruction({instr});
     }
 
+    void StackCodeGenerator::expr_cast(const expr& e)
+    {
+        TranslateExpression(e.operands.front());
+
+        DataType from = e.operands.front().dataType;
+        DataType to = e.dataType;
+        std::string instr = "";
+        std::string arg = "";
+        const expr* argExpr = nullptr;
+        if (&e.operands.back() != &e.operands.front()) // If an arg was given.
+            argExpr = &e.operands.back();
+
+        if (from == DataType::INT)
+        {
+            switch (to)
+            {
+                case DataType::INT:    return; // Ignore
+                case DataType::LONG:   instr = "ITOL"; break;
+                case DataType::FLOAT:  instr = "ITOF"; break;
+                case DataType::DOUBLE: instr = "ITOD"; break;
+                case DataType::STRING: instr = "ITOS"; break;
+            }
+        }
+        else if (from == DataType::LONG)
+        {
+            switch (to)
+            {
+                case DataType::LONG:   return; // Ignore
+                case DataType::INT:    instr = "LTOI"; break;
+                case DataType::FLOAT:  instr = "LTOF"; break;
+                case DataType::DOUBLE: instr = "LTOD"; break;
+                case DataType::STRING: instr = "LTOS"; break;
+            }
+        }
+        else if (from == DataType::FLOAT)
+        {
+            switch (to)
+            {
+                case DataType::FLOAT:  return; // Ignore
+                case DataType::INT:    instr = "FTOI"; break;
+                case DataType::LONG:   instr = "FTOL"; break;
+                case DataType::DOUBLE: instr = "FTOD"; break;
+                case DataType::STRING: instr = "FTOS";
+                    arg = argExpr ? std::to_string(argExpr->intValue) : "0"; // Default to 0 decimals (just %f).
+                    break;
+            }
+        }
+        else if (from == DataType::DOUBLE)
+        {
+            switch (to)
+            {
+                case DataType::DOUBLE: return; // Ignore
+                case DataType::INT:    instr = "DTOI"; break;
+                case DataType::FLOAT:  instr = "DTOF"; break;
+                case DataType::LONG:   instr = "DTOL"; break;
+                case DataType::STRING: instr = "DTOS";
+                    arg = argExpr ? std::to_string(argExpr->intValue) : "0"; // Default to 0 decimals (just %f).
+                    break;
+            }
+        }
+        else if (from == DataType::STRING)
+        {
+            // Needs to process arg if present, otherwise use a default.
+            switch (to)
+            {
+                // Special case: if explicity casting a string to a string, then copy it into a new string.
+                // The arg specifies how many characters to copy. This can be used for substring functionality.
+                case DataType::STRING: instr = "STRCPY";
+                    arg = argExpr ? std::to_string(argExpr->intValue+1) : "2147483647";
+                    break; 
+
+                case DataType::INT: instr = "STOI"; 
+                    arg = argExpr ? std::to_string(argExpr->intValue) : "0";
+                    break;
+
+                case DataType::FLOAT: instr = "STOF";
+                    arg = argExpr ? std::to_string(argExpr->floatValue) : "0.0f";
+                    break;
+
+                case DataType::LONG: instr = "STOL";
+                    arg = argExpr ? std::to_string(argExpr->longValue) : "0";
+                    break;
+
+                case DataType::DOUBLE: instr = "STOD";
+                    arg = argExpr ? std::to_string(argExpr->doubleValue) : "0.0";
+                    break;
+            }
+        }
+
+        if (instr != "")
+        {
+            if (arg == "")
+                AddInstruction({instr});
+            else
+                AddInstruction({instr, arg});
+        }
+        else
+        {
+            RETURN_ERROR();   
+        }
+    }
+
     //---- RegisterCodeGenerator Implementation ----//
   
-    RegisterCodeGenerator::RegisterCodeGenerator(uint32_t initialHeapSize, uint32_t maxHeapSize) :
-        CodeGenerator(initialHeapSize, maxHeapSize)
+    RegisterCodeGenerator::RegisterCodeGenerator(uint32_t initialHeapSize, uint32_t maxHeapSize, 
+        const std::vector<func>& funcList, const StringLiteralMap& literals) :
+        CodeGenerator(initialHeapSize, maxHeapSize, funcList, literals)
     {
     }
 
@@ -557,4 +764,8 @@ namespace Compiler
         RETURN_ERROR();
     }
 
+    void RegisterCodeGenerator::expr_cast(const expr& e)
+    {
+        RETURN_ERROR();
+    }
 }
