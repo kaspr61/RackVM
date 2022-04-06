@@ -42,6 +42,19 @@ namespace Assembly
         VM_MODE_REGISTER = 0,
         VM_MODE_STACK    = 1
     };
+
+    union EndianTester
+    {
+        uint32_t n;
+        uint8_t  b[4];
+    };
+
+    constexpr EndianTester g_endianTester = {0x0102'0304};
+
+    constexpr bool IsLittleEndian()
+    {
+        return g_endianTester.b[0] == 0x04;
+    }
 }
 
 #endif // INC_COMMON_HPP

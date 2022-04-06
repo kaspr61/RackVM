@@ -489,11 +489,12 @@ namespace Assembly {
                 '|' << std::setw(36) << finalTranslation.str(); 
             std::cout << "(";
 
-            uint8_t* ptr = (uint8_t*)result.instr + instrBytes - 1;
-            while (ptr > (uint8_t*)result.instr)
-                printf("%02hhX ", *--ptr);
-
             printf("%02hhX", result.opcode);
+
+            uint8_t* ptr = (uint8_t*)result.instr;
+            while (ptr < ((uint8_t*)result.instr) + instrBytes)
+                printf(" %02hhX", *ptr++);
+
             std::cout << ")" << std::endl;
         }
 
@@ -556,6 +557,8 @@ using namespace Assembly;
 
 int main(int argc, char* argv[])
 {
+    std::cout << (IsLittleEndian() ? "Little endian" : "Big endian") << std::endl;
+
     if (argc < 2)
     {
         std::cout << "Invalid arguments." << std::endl;
