@@ -94,7 +94,7 @@ namespace Assembly
         std::string RemoveWhitespace(const std::string& str) const;
         void PrintMemory(void* address, size_t byteCount) const;
         BinaryInstruction TranslateInstruction(const std::string& opcode, uint64_t* args);
-        uint32_t EvaluateArgument(const std::string& arg);
+        uint64_t EvaluateArgument(const std::string& arg);
         void ExecAssemblerDirective(const std::string& directive, const std::string* args);
         void FirstPassReadLine(std::string& line);
         void AssembleLine(std::string& line, std::iostream& binaryOutput);

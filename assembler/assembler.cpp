@@ -90,10 +90,10 @@ namespace Assembly {
         return std::move(m_encoder.TranslateInstruction(opcode, args));
     }
 
-    uint32_t Assembler::EvaluateArgument(const std::string& arg)
+    uint64_t Assembler::EvaluateArgument(const std::string& arg)
     {
         size_t pos;
-        uint32_t result = 0;
+        uint64_t result = 0;
 
         // Check is numeric unary expression.
         if (arg.find_first_not_of("-0123456789") == std::string::npos) // Only contains digits and/or '-'.
@@ -101,7 +101,7 @@ namespace Assembly {
             pos = arg.rfind('-');
             if (pos == std::string::npos || pos == 0) // Is positive or negative integer
             {
-                return std::stoul(arg.c_str());
+                return std::stoull(arg.c_str());
             }
         }
         
@@ -119,12 +119,12 @@ namespace Assembly {
             std::string rightStr = arg.substr(pos + 1);
             char op = arg[pos];
 
-            uint32_t left, right;
+            uint64_t left, right;
             if (leftStr.find_first_not_of("0123456789") == std::string::npos)
             {
-                left = std::stoul(leftStr);
+                left = std::stoull(leftStr);
             }
-            else if (!m_labelDict.ResolveLabel(leftStr, left))
+            else if (!m_labelDict.ResolveLabel(leftStr, (uint32_t&)left))
             {
                 InstructionError("Use of undefined label \"" << leftStr << "\".");
                 return 0;
@@ -132,9 +132,9 @@ namespace Assembly {
 
             if (rightStr.find_first_not_of("0123456789") == std::string::npos)
             {
-                right = std::stoul(rightStr);
+                right = std::stoull(rightStr);
             }
-            else if (!m_labelDict.ResolveLabel(rightStr, right))
+            else if (!m_labelDict.ResolveLabel(rightStr, (uint32_t&)right))
             {
                 InstructionError("Use of undefined label \"" << rightStr << "\".");
                 return 0;
@@ -154,12 +154,15 @@ namespace Assembly {
         {
             int isNegative = arg[0] == '-' ? 1 : 0;
             std::string label = arg.substr(isNegative);
+            uint32_t lblAddress;
 
-            if (!m_labelDict.ResolveLabel(label, result))
+            if (!m_labelDict.ResolveLabel(label, lblAddress))
             {
                 InstructionError("Use of undefined label \"" << label << "\".");
                 return 0;
             }
+
+            result = static_cast<uint64_t>(lblAddress);
 
             if (isNegative)                
                 result = -result;

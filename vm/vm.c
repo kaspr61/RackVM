@@ -83,19 +83,88 @@ typedef enum {
     S_DIV_64,
     S_DIV_F,
     S_DIV_F64,
-
-
     /* Bit Stuff */
-
-
+    S_INV       = 0x24,
+    S_INV_64,
+    S_NEG,
+    S_NEG_64,
+    S_NEG_F,
+    S_NEG_F64,
+    S_BOR,
+    S_BOR_64,
+    S_BXOR,
+    S_BXOR_64,
+    S_BAND,
+    S_BAND_64,
+    S_OR,
+    S_AND,
     /* Conditions & Branches */
-
-
+    S_CPZ       = 0x32,
+    S_CPZ_64,
+    S_CPEQ,
+    S_CPEQ_64,
+    S_CPEQ_F,
+    S_CPEQ_F64,
+    S_CPNQ,
+    S_CPNQ_64,
+    S_CPNQ_F,
+    S_CPNQ_F64,
+    S_CPGT,
+    S_CPGT_64,
+    S_CPGT_F,
+    S_CPGT_F64,
+    S_CPLT,
+    S_CPLT_64,
+    S_CPLT_F,
+    S_CPLT_F64,
+    S_CPGQ,
+    S_CPGQ_64,
+    S_CPGQ_F,
+    S_CPGQ_F64,
+    S_CPLQ,
+    S_CPLQ_64,
+    S_CPLQ_F,
+    S_CPLQ_F64,
+    S_CPSTR,
+    S_CPCHR,
+    S_BRZ,
+    S_BRNZ,
+    S_JMP,
+    S_BRIZ,
+    S_BRINZ,
+    S_JMPI,
     /* Conversions */
-
-
+    S_ITOL      = 0x54,
+    S_ITOF,
+    S_ITOD,
+    S_ITOS,
+    S_LTOI,
+    S_LTOF,
+    S_LTOD,
+    S_LTOS,
+    S_FTOI,
+    S_FTOL,
+    S_FTOD,
+    S_FTOS,
+    S_DTOI,
+    S_DTOL,
+    S_DTOF,
+    S_DTOS,
+    S_STOI,
+    S_STOL,
+    S_STOF,
+    S_STOD,
     /* Miscellaneous */
-
+    S_NEW       = 0x68,
+    S_DEL,
+    S_RESZ,
+    S_SIZE,
+    S_CALL,
+    S_RET,
+    S_SCALL,
+    S_SARG,
+    S_STR,
+    S_STRCPY,
 
     OPCODE_COUNT
 } Opcode_t;
@@ -160,6 +229,7 @@ static Instr_t instr;       /* Instruction "register". */
 static uint8_t *instrPtr;   /* Pointer to the next instruction. */
 static uint8_t *program;    /* Pointer to start of program memory. */
 static uint8_t *programEnd; /* Pointer to end of program memory. */
+static VMMode_t vmMode;
 
 /* 
  * Implements an interpreter loop with switch dispatch for the 
@@ -191,6 +261,7 @@ int StackInterpreterLoop()
                 break;
 
             /**** Arithmetics ****/
+
 #define STACK_OP(op) op
 #define STACK_OP_32(type, op) *(type)--sp = *(type)(sp-1) STACK_OP(op) *(type)(sp)
 #define STACK_OP_64(type, op) sp -= 3; *(type)sp++ = *(type)sp STACK_OP(op) *(type)(sp+2)
@@ -259,6 +330,146 @@ int StackInterpreterLoop()
                 instrPtr += 1;
                 break;
 
+            /**** Bit Stuff ****/
+
+            case S_INV: *(int32_t*)sp = ~(int32_t)*sp;
+                instrPtr += 1;
+                break;
+
+            case S_INV_64: *(int64_t*)(sp-1) = ~(int64_t)*(sp-1);
+                instrPtr += 1;
+                break;
+
+            case S_NEG: *(int32_t*)sp = -((int32_t)*sp);
+                instrPtr += 1;
+                break;
+
+            case S_NEG_64: *(int64_t*)(sp-1) = -((int64_t)*(sp-1));
+                instrPtr += 1;
+                break;
+
+            case S_NEG_F: *(float*)sp = -((float)*sp);
+                instrPtr += 1;
+                break;
+
+            case S_NEG_F64: *(double*)(sp-1) = -((double)*(sp-1));
+                instrPtr += 1;
+                break;
+
+            case S_BOR: STACK_OP_32(int32_t *, |);
+                instrPtr += 1;
+                break;
+
+            case S_BOR_64: STACK_OP_64(int64_t *, |);
+                instrPtr += 1;
+                break;
+
+            case S_BXOR: STACK_OP_32(int32_t *, ^);
+                instrPtr += 1;
+                break;
+
+            case S_BXOR_64: STACK_OP_64(int64_t *, ^);
+                instrPtr += 1;
+                break;
+
+            case S_BAND: STACK_OP_32(int32_t *, &);
+                instrPtr += 1;
+                break;
+
+            case S_BAND_64: STACK_OP_64(int64_t *, &);
+                instrPtr += 1;
+                break;
+
+            case S_OR: STACK_OP_32(int32_t *, ||);
+                instrPtr += 1;
+                break;
+
+            case S_AND: STACK_OP_32(int32_t *, &&);
+                instrPtr += 1;
+                break;
+
+            /**** Conversions ****/
+
+            case S_ITOL: *(int64_t*)sp++ = (int64_t)*sp;
+                instrPtr += 1;
+                break;
+
+            case S_ITOF: *(float*)sp = (float)*sp;
+                instrPtr += 1;
+                break;
+
+            case S_ITOD: *(double*)sp++ = (double)*sp;
+                instrPtr += 1;
+                break;
+
+            case S_ITOS: /**/
+                instrPtr += 1;
+                break;
+
+            case S_LTOI: *(int32_t*)--sp = (int32_t)*(sp-1);
+                instrPtr += 1;
+                break;
+
+            case S_LTOF: *(float*)--sp = (float)*(sp-1);
+                instrPtr += 1;
+                break;
+
+            case S_LTOD: *(double*)(sp-1) = (double)*(sp-1);
+                instrPtr += 1;
+                break;
+
+            case S_LTOS: /**/
+                instrPtr += 1;
+                break;
+
+            case S_FTOI: *(int32_t*)sp = (int32_t)*sp;
+                instrPtr += 1;
+                break;
+
+            case S_FTOL: *(int64_t*)sp++ = (int64_t)*sp;
+                instrPtr += 1;
+                break;
+
+            case S_FTOD: *(double*)sp++ = (double)*sp;
+                instrPtr += 1;
+                break;
+
+            case S_FTOS: /**/
+                instrPtr += 2;
+                break;
+
+            case S_DTOI: *(int32_t*)--sp = (int32_t)*(sp-1);
+                instrPtr += 1;
+                break;
+
+            case S_DTOF: *(float*)--sp = (float)*(sp-1);
+                instrPtr += 1;
+                break;
+
+            case S_DTOL: *(int64_t*)(sp-1) = (int64_t)*(sp-1);
+                instrPtr += 1;
+                break;
+
+            case S_DTOS: /**/
+                instrPtr += 2;
+                break;
+
+            case S_STOI: /**/
+                instrPtr += 5;
+                break;
+
+            case S_STOL: /**/
+                instrPtr += 9;
+                break;
+
+            case S_STOF: /**/
+                instrPtr += 5;
+                break;
+
+            case S_STOD: /**/
+                instrPtr += 9;
+                break;
+
             default: 
                 return VM_EXIT_FAILURE;
         }
@@ -286,7 +497,7 @@ int ReadProgram(const char *fileName)
     }
 
     /* 0 = vm mode, 1 = initial heap size, 2 = max heap size. */
-    VMMode_t mode = header[0];
+    vmMode = header[0];
 
     /*
         ... Here it should allocate initial heap memory.
@@ -329,15 +540,17 @@ void DumpStack()
 {
     /* Print the stack up until sp */
     printf("======== STACK DUMP ==============================================\n");
-    printf("    %-3s %-10s %-10s %-10s %-10s %-s \n", "[]", "i32", "i64", "f32", "f64", "hex");
+    printf("        %-3s %-10s %-20s %-s \n", "[]", "i32", "i64", "hex");
     puts("------------------------------------------------------------------");
-    printf(" -> %-3lu %-10d %-10ld %-10f %-10lf 0x%0X \n", 
-        sp - stackBegin, *sp, *(sp-1), *(float*)sp, *(double*)(sp-1), *sp);
+    printf(" ━┯i32➞ %-3lu %-10ld %-20lld 0x%0X \n", 
+        sp - stackBegin, *sp, *(int64_t*)sp, *sp);
+    printf("  ╰i64➞ %-3lu %-10ld %-20lld 0x%0X \n", 
+        (sp-1) - stackBegin, *(sp-1), *(int64_t*)(sp-1), *(sp-1));
 
     int32_t *i;
-    for (i = sp - 1; i >= stackBegin; --i)
-        printf("    %-3lu %-10d %-10ld %-10f %-10lf 0x%0X \n", 
-            i - stackBegin, *i, *(i-1), *(float*)i, *(double*)(i-1), *i);
+    for (i = sp - 2; i >= stackBegin; --i)
+        printf("        %-3lu %-10ld %-20lld 0x%0X \n", 
+            i - stackBegin, *i, *(int64_t*)i, *i);
 
     puts("------------------------------------------------------------------");
 }
@@ -373,7 +586,12 @@ int main(int argc, const char **argv)
 
     AllocateStack();
 
-    int exitCode = StackInterpreterLoop();
+    int exitCode;
+    if (vmMode == VM_MODE_STACK)
+        exitCode = StackInterpreterLoop();
+    else
+        exitCode = 0;
+
     if (exitCode != VM_EXIT_SUCCESS)
         printf("Exited with exit code %d", exitCode);
 
