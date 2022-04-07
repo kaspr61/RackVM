@@ -57,11 +57,12 @@ namespace Assembly
 
     struct BinaryHeader
     {
-        uint32_t mode, heap, heap_max;
+        uint32_t mode, heap, heap_max, dataStart;
         BinaryHeader() : 
             mode(DEFAULT_MODE), 
             heap(DEFAULT_HEAP), 
-            heap_max(DEFAULT_HEAP_MAX)
+            heap_max(DEFAULT_HEAP_MAX),
+            dataStart(UINT32_MAX)
         {}
     };
 

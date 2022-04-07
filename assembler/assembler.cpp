@@ -242,6 +242,10 @@ namespace Assembly {
             workingText << directive << ';' << args[0] << ';' << args[1] << ';' << std::endl;
             m_instrAddr += std::stoul(args[0]);
         }
+        else if (directive == ".DATA") // Sets header info field 'dataStart'.
+        {
+            m_binHeader.dataStart = m_instrAddr;
+        }
         else
         {
             LineError("Unknown assembler directive \"" << directive << "\".");

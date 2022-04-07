@@ -7,6 +7,7 @@ set_property(TARGET ${TARGET_VM} PROPERTY C_STANDARD 99)
 target_sources(${TARGET_VM}
     PRIVATE
         vm.c
+        vm_memory.c    vm_memory.h
 )
 
 if(UNION_DECODING)

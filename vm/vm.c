@@ -28,6 +28,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdbool.h>
+
+#include "vm_memory.h"
 
 /* The number of 32-bit elements on the stack. 512 = 2 KiB stack. */
 #define STACK_SIZE 512
@@ -226,14 +229,6 @@ typedef union {
     #define DECODE_OPCODE() (*(uint8_t *)(&instr) & 0xFF)
 #endif
 
-typedef union {
-    uint8_t u8;
-    int32_t i32;
-    int64_t i64;
-    int32_t f32;
-    int64_t f64;
-} StackValue_t;
-
 /**** GLOBALS ****/
 
 static int32_t *stackBegin; /* Pointer to the beginning of the stack. */
@@ -242,8 +237,10 @@ static int32_t *sp;         /* Stack pointer (top-of-stack). */
 static Instr_t instr;       /* Instruction "register". */
 static uint8_t *instrPtr;   /* Pointer to the next instruction. */
 static uint8_t *program;    /* Pointer to start of program memory. */
-static uint8_t *programEnd; /* Pointer to end of program memory. */
+static uint8_t *programEnd; /* Pointer to end of program memory (incl. data). */
+static uint8_t *instrEnd;   /* Pointer to end of instructions in program memory. */
 static VMMode_t vmMode;
+static char     strBuf[32];
 
 /* 
  * Implements an interpreter loop with switch dispatch for the 
@@ -252,7 +249,7 @@ static VMMode_t vmMode;
 */
 int StackInterpreterLoop()
 {
-    while (instrPtr < programEnd)
+    while (instrPtr < instrEnd)
     {
         instr = *(Instr_t *)instrPtr;
 
@@ -556,7 +553,8 @@ int StackInterpreterLoop()
                 instrPtr += 1;
                 break;
 
-            case S_ITOS: /**/
+            case S_ITOS: snprintf(strBuf, 32, "%d", *(int32_t*)sp); 
+                *sp = HeapAllocString(strBuf);
                 instrPtr += 1;
                 break;
 
@@ -624,6 +622,48 @@ int StackInterpreterLoop()
                 instrPtr += 9;
                 break;
 
+            /**** Miscellaneous ****/
+
+            case S_NEW: *sp = HeapAlloc(*sp);
+                instrPtr += 1;
+                break;
+
+            case S_DEL: HeapFree(*sp--);
+                instrPtr += 1;
+                break;
+
+            case S_RESZ: *--sp = HeapRealloc(*sp, *(sp-1));
+                instrPtr += 1;
+                break;
+
+            case S_SIZE: *sp = GetHeapAllocSize(*sp);
+                instrPtr += 1;
+                break;
+
+            case S_CALL: /**/
+                instrPtr += 5;
+                break;
+
+            case S_RET: /**/
+                instrPtr += 1;
+                break;
+
+            case S_SCALL: /**/
+                instrPtr += 2;
+                break;
+
+            case S_SARG: /**/
+                instrPtr += 2;
+                break;
+
+            case S_STR: *++sp = HeapAllocString((const char *)(program + DECODE_32(u32, Addr_t, C, 0)));
+                instrPtr += 5;
+                break;
+
+            case S_STRCPY: *sp = HeapAllocSubStr((const char *)(heap + *sp), DECODE_32(u32, uint32_t, C, 0));
+                instrPtr += 5;
+                break;
+
             default: 
                 return VM_EXIT_FAILURE;
         }
@@ -635,39 +675,46 @@ int StackInterpreterLoop()
     return VM_EXIT_SUCCESS;
 }
 
-int ReadProgram(const char *fileName)
+bool ReadProgram(const char *fileName)
 {
     FILE *file = fopen(fileName, "rb");
     if (!file)
-        return 0;
+        return false;
 
-    uint32_t header[3] = {0};
-    size_t headerRead = fread(header, sizeof(uint32_t), 3, file);
-    if (headerRead != 3)
+    uint32_t header[4] = {0};
+    size_t headerRead = fread(header, sizeof(uint32_t), 4, file);
+    if (headerRead != 4)
     {
         printf("Malformed program header.\n");
         fclose(file);
-        return 0;
+        return false;
     }
 
-    /* 0 = vm mode, 1 = initial heap size, 2 = max heap size. */
+    /* 0 = vm mode, 1 = initial heap size, 2 = max heap size, 3 = data section start address. */
     vmMode = header[0];
 
-    /*
-        ... Here it should allocate initial heap memory.
-        This will be implemented using a memory manager...
-    */
+    /* Convert heap sizes from KiB to bytes. */
+    header[1] *= 1024;
+    header[2] *= 1024;
+
+    if (!AllocateHeap(header[1], header[2]))
+    {
+        printf("Failed to allocate %llu heap memory (max %llu)!\n", 
+            header[1], header[2]);
+        return false;
+    }
 
     size_t headerEnd = ftell(file);
     fseek(file, 0, SEEK_END);
 
-    /* Get the program size (excluding the header), and 
+    /* Get the program size excluding the header and data section, and 
      * return to the end of the header. */
     size_t programSize = ftell(file) - headerEnd;
     fseek(file, headerEnd, SEEK_SET);
 
     /* Dynamically allocate the program memory. */
     program = malloc(programSize);
+    instrEnd = program + header[3];
     programEnd = program + programSize;
 
     /* Copy the program file's contents to the designated block of memory. */
@@ -677,7 +724,7 @@ int ReadProgram(const char *fileName)
 
     instrPtr = program;
 
-    return 1;
+    return true;
 }
 
 void AllocateStack()
@@ -711,6 +758,7 @@ void DumpStack()
 
 void Cleanup()
 {
+    DeallocateHeap();
     free(stackBegin);
     free(program);
 }
