@@ -37,6 +37,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define VM_EXIT_FAILURE        100
 #define VM_EXIT_STACK_OVERFLOW 101
 
+#define MACRO_LITERAL(x) x
+
 typedef enum {
     VM_MODE_REGISTER = 0,
     VM_MODE_STACK = 1
@@ -181,7 +183,7 @@ typedef enum {
 
 typedef union {
     uint8_t raw[13];
-    
+#ifdef UNION_DECODING
     struct GCC_PACK {
         uint8_t opcode;
         uint8_t C;
@@ -201,7 +203,7 @@ typedef union {
         uint8_t opcode;
         int64_t C;
     } i64;
-
+#endif
     struct GCC_PACK {
         uint8_t  opcode;
         uint32_t operand[3];
@@ -210,6 +212,18 @@ typedef union {
 
 #ifndef __GNUC__
     #pragma pack()
+#endif
+
+#ifdef UNION_DECODING
+    #define DECODE(layout, type, field, offset, mask) instr.layout.field
+    #define DECODE_32(layout, type, field, offset) instr.layout.field
+    #define DECODE_64(layout, type, field, offset) instr.layout.field
+    #define DECODE_OPCODE() instr.opcode
+#else
+    #define DECODE(layout, type, field, offset, mask) ((*(type *)(instr.raw + 1 + offset) & mask) >> (offset * 8))
+    #define DECODE_32(layout, type, field, offset) DECODE(layout, type, field, offset, 0xFFFFFFFF)
+    #define DECODE_64(layout, type, field, offset) DECODE(layout, type, field, offset, 0xFFFFFFFFFFFFFFFF)
+    #define DECODE_OPCODE() (*(uint8_t *)(&instr) & 0xFF)
 #endif
 
 typedef union {
@@ -242,7 +256,7 @@ int StackInterpreterLoop()
     {
         instr = *(Instr_t *)instrPtr;
 
-        switch (instr.opcode)
+        switch (DECODE_OPCODE())
         {
             case NOP: instrPtr += 1;
                 break;
@@ -252,19 +266,18 @@ int StackInterpreterLoop()
 
             /**** Load & Store ****/
 
-            case S_LDI: *(int32_t*)++sp = instr.i32.C;
+            case S_LDI: *(int32_t*)++sp = DECODE_32(i32, int32_t, C, 0);
                 instrPtr += 5;
                 break;
 
-            case S_LDI_64: ++sp; *(int64_t*)sp++ = instr.i64.C;
+            case S_LDI_64: ++sp; *(int64_t*)sp++ = DECODE_64(i64, int64_t, C, 0);
                 instrPtr += 9;
                 break;
 
             /**** Arithmetics ****/
 
-#define STACK_OP(op) op
-#define STACK_OP_32(type, op) *(type)--sp = *(type)(sp-1) STACK_OP(op) *(type)(sp)
-#define STACK_OP_64(type, op) sp -= 3; *(type)sp++ = *(type)sp STACK_OP(op) *(type)(sp+2)
+#define STACK_OP_32(type, op) *(type)--sp = *(type)(sp-1) MACRO_LITERAL(op) *(type)(sp)
+#define STACK_OP_64(type, op) sp -= 3; *(type)sp++ = *(type)sp MACRO_LITERAL(op) *(type)(sp+2)
 
             case S_ADD: STACK_OP_32(int32_t *, +);
                 instrPtr += 1;
@@ -340,19 +353,19 @@ int StackInterpreterLoop()
                 instrPtr += 1;
                 break;
 
-            case S_NEG: *(int32_t*)sp = -((int32_t)*sp);
+            case S_NEG: *(int32_t*)sp = -(*(int32_t*)sp);
                 instrPtr += 1;
                 break;
 
-            case S_NEG_64: *(int64_t*)(sp-1) = -((int64_t)*(sp-1));
+            case S_NEG_64: *(int64_t*)(sp-1) = -(*(int64_t*)(sp-1));
                 instrPtr += 1;
                 break;
 
-            case S_NEG_F: *(float*)sp = -((float)*sp);
+            case S_NEG_F: *(float*)sp = -(*(float*)sp);
                 instrPtr += 1;
                 break;
 
-            case S_NEG_F64: *(double*)(sp-1) = -((double)*(sp-1));
+            case S_NEG_F64: *(double*)(sp-1) = -(*(double*)(sp-1));
                 instrPtr += 1;
                 break;
 
@@ -540,16 +553,16 @@ void DumpStack()
 {
     /* Print the stack up until sp */
     printf("======== STACK DUMP ==============================================\n");
-    printf("        %-3s %-10s %-20s %-s \n", "[]", "i32", "i64", "hex");
+    printf("          %-3s %-10s %-20s %-s \n", "[]", "i32", "i64", "hex");
     puts("------------------------------------------------------------------");
-    printf(" ━┯i32➞ %-3lu %-10ld %-20lld 0x%0X \n", 
+    printf("SP ==32=> %-3lu %-10ld %-20lld 0x%0X \n", 
         sp - stackBegin, *sp, *(int64_t*)sp, *sp);
-    printf("  ╰i64➞ %-3lu %-10ld %-20lld 0x%0X \n", 
+    printf("   --64-> %-3lu %-10ld %-20lld 0x%0X \n", 
         (sp-1) - stackBegin, *(sp-1), *(int64_t*)(sp-1), *(sp-1));
 
     int32_t *i;
     for (i = sp - 2; i >= stackBegin; --i)
-        printf("        %-3lu %-10ld %-20lld 0x%0X \n", 
+        printf("          %-3lu %-10ld %-20lld 0x%0X \n", 
             i - stackBegin, *i, *(int64_t*)i, *i);
 
     puts("------------------------------------------------------------------");
@@ -563,6 +576,12 @@ void Cleanup()
 
 int main(int argc, const char **argv)
 {
+#ifdef UNION_DECODING
+    puts("[RackVM] Decoding instructions using the union technique.");
+#else
+    puts("[RackVM] Decoding instructions using the bitmasking technique.");
+#endif
+
     /* First of all, do a runtime check for the size of Instr_t. 
      * If this does not match, instructions will be misinterpreted,
      * and the union "decoding" technique would be meaningless.*/
