@@ -276,7 +276,10 @@ int StackInterpreterLoop()
 
             /**** Arithmetics ****/
 
+/* Consumes 2 32-bit values and pushes a 32-bit value. */
 #define STACK_OP_32(type, op) *(type)--sp = *(type)(sp-1) MACRO_LITERAL(op) *(type)(sp)
+
+/* Consumes 2 64-bit values and pushes a 64-bit value. */
 #define STACK_OP_64(type, op) sp -= 3; *(type)sp++ = *(type)sp MACRO_LITERAL(op) *(type)(sp+2)
 
             case S_ADD: STACK_OP_32(int32_t *, +);
@@ -399,6 +402,144 @@ int StackInterpreterLoop()
 
             case S_AND: STACK_OP_32(int32_t *, &&);
                 instrPtr += 1;
+                break;
+
+            /**** Comparisons ****/
+
+/* Consumes 2 32-bit values and pushes a bool value (int32_t). */
+#define STACK_OP_32_BOOL(type, op) *(int32_t*)--sp = *(type)(sp-1) MACRO_LITERAL(op) *(type)(sp)
+
+/* Consumes 2 64-bit values and pushes a bool value (int32_t). */
+#define STACK_OP_64_BOOL(type, op) sp -= 3; *(int32_t*)sp = *(type)sp MACRO_LITERAL(op) *(type)(sp+2)
+
+            case S_CPZ: *(int32_t*)sp = !(*(int32_t*)sp);
+                instrPtr += 1;
+                break;
+
+            case S_CPZ_64: *(int64_t*)(sp-1) = !(*(int64_t*)(sp-1));
+                instrPtr += 1;
+                break;
+
+            case S_CPEQ: STACK_OP_32_BOOL(int32_t*, ==);
+                instrPtr += 1;
+                break;
+
+            case S_CPEQ_64: STACK_OP_64_BOOL(int64_t*, ==);
+                instrPtr += 1;
+                break;
+
+            case S_CPEQ_F: STACK_OP_32_BOOL(float*, ==);
+                instrPtr += 1;
+                break;
+
+            case S_CPEQ_F64: STACK_OP_64_BOOL(double*, ==);
+                instrPtr += 1;
+                break;
+
+            case S_CPNQ: STACK_OP_32_BOOL(int32_t*, !=);
+                instrPtr += 1;
+                break;
+
+            case S_CPNQ_64: STACK_OP_64_BOOL(int64_t*, !=);
+                instrPtr += 1;
+                break;
+
+            case S_CPNQ_F: STACK_OP_32_BOOL(float*, !=);
+                instrPtr += 1;
+                break;
+
+            case S_CPNQ_F64: STACK_OP_64_BOOL(double*, !=);
+                instrPtr += 1;
+                break;
+
+            case S_CPGT: STACK_OP_32_BOOL(int32_t*, >);
+                instrPtr += 1;
+                break;
+
+            case S_CPGT_64: STACK_OP_64_BOOL(int64_t*, >);
+                instrPtr += 1;
+                break;
+
+            case S_CPGT_F: STACK_OP_32_BOOL(float*, >);
+                instrPtr += 1;
+                break;
+
+            case S_CPGT_F64: STACK_OP_64_BOOL(double*, >);
+                instrPtr += 1;
+                break;
+
+            case S_CPLT: STACK_OP_32_BOOL(int32_t*, <);
+                instrPtr += 1;
+                break;
+
+            case S_CPLT_64: STACK_OP_64_BOOL(int64_t*, <);
+                instrPtr += 1;
+                break;
+
+            case S_CPLT_F: STACK_OP_32_BOOL(float*, <);
+                instrPtr += 1;
+                break;
+
+            case S_CPLT_F64: STACK_OP_64_BOOL(double*, <);
+                instrPtr += 1;
+                break;
+
+            case S_CPGQ: STACK_OP_32_BOOL(int32_t*, >=);
+                instrPtr += 1;
+                break;
+
+            case S_CPGQ_64: STACK_OP_64_BOOL(int64_t*, >=);
+                instrPtr += 1;
+                break;
+
+            case S_CPGQ_F: STACK_OP_32_BOOL(float*, >=);
+                instrPtr += 1;
+                break;
+
+            case S_CPGQ_F64: STACK_OP_64_BOOL(double*, >=);
+                instrPtr += 1;
+                break;
+
+            case S_CPLQ: STACK_OP_32_BOOL(int32_t*, <=);
+                instrPtr += 1;
+                break;
+
+            case S_CPLQ_64: STACK_OP_64_BOOL(int64_t*, <=);
+                instrPtr += 1;
+                break;
+
+            case S_CPLQ_F: STACK_OP_32_BOOL(float*, <=);
+                instrPtr += 1;
+                break;
+
+            case S_CPLQ_F64: STACK_OP_64_BOOL(double*, <=);
+                instrPtr += 1;
+                break;
+
+            case S_CPSTR: /**/
+                instrPtr += 1;
+                break;
+
+            case S_CPCHR: /**/
+                instrPtr += 1;
+                break;
+
+            case S_BRZ: instrPtr = !*sp-- ? program + DECODE_32(u32, uint32_t, C, 0) : instrPtr + 5;
+                break;
+
+            case S_BRNZ: instrPtr = *sp-- ? program + DECODE_32(u32, uint32_t, C, 0) : instrPtr + 5;
+                break;
+
+            case S_JMP: instrPtr = program + DECODE_32(u32, uint32_t, C, 0);
+                break;
+
+            case S_BRIZ: sp -= 2; instrPtr = !*(sp+1) ? program + *(uint32_t*)(sp+2) : instrPtr + 1;
+                break;
+
+            case S_BRINZ: sp -= 2; instrPtr = *(sp+1) ? program + *(uint32_t*)(sp+2) : instrPtr + 1;
+                break;
+
+            case S_JMPI: instrPtr = program + *(uint32_t*)sp--;
                 break;
 
             /**** Conversions ****/
