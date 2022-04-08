@@ -137,6 +137,12 @@ Addr_t HeapRealloc(Addr_t address, uint32_t size)
 
     if (reqSize < currSize)
     {
+        Alloc_t *next = (Alloc_t *)((uint8_t*)curr + reqSize);
+        next->prev = curr;
+        next->safebytes = ALLOC_SAFE_BYTES;
+        next->next = curr->next->next;
+
+        curr->next = next;
 
         return address + sizeof(Alloc_t);
     }
@@ -157,8 +163,16 @@ Addr_t HeapRealloc(Addr_t address, uint32_t size)
     }
     else /* Otherwise, find a new block of memory to inhabit. */
     {
-        HeapFree(address + sizeof(Alloc_t));
+        Alloc_t *old = (Alloc_t*)(heap + address);
+        uint32_t oldDataSize = ((uint8_t*)(old->next) - (uint8_t*)old) - sizeof(Alloc_t);
+        address += sizeof(Alloc_t);
+
         newAddress = HeapAlloc(size);
+
+        /* Copy the old data to the new data. No Alloc_t header, only data.*/
+        memcpy(heap + newAddress, heap + address,  oldDataSize);
+
+        HeapFree(address);
     }
 
     return newAddress;
