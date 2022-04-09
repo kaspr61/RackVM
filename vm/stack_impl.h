@@ -36,6 +36,13 @@ int StackInterpreterLoop()
     char *tmp1;
     char *tmp2;
     int32_t tmpInt;
+
+    /* In order to maintain consistency between LDL/STL and LDA/STA, locals must 
+     * be accessed through this, since it is 4 bytes higher than 'stackFrame'.
+     * This is to remove the need for adding 4 bytes to the offset each time
+     * you load and store locals, which happens A LOT. */
+    int32_t *stackFrameLocals = stackFrame + 1; 
+
     while (instrPtr < instrEnd)
     {
         instr = *(Instr_t *)instrPtr;
@@ -68,12 +75,12 @@ int StackInterpreterLoop()
                 instrPtr += 1;
                 break;
 
-            case S_STMI: *(int32_t*)(heap + *sp + DECODE(u32, uint32_t, C, 0, UINT32_MAX)) = *(int32_t*)(sp-1);
+            case S_STMI: *(int32_t*)(heap + *sp + DECODE_ADDR()) = *(int32_t*)(sp-1);
                 sp -= 2;
                 instrPtr += 5;
                 break;
 
-            case S_STMI_64: *(int64_t*)(heap + *sp + DECODE(u32, uint32_t, C, 0, UINT32_MAX)) = *(int64_t*)(sp-2);
+            case S_STMI_64: *(int64_t*)(heap + *sp + DECODE_ADDR()) = *(int64_t*)(sp-2);
                 sp -= 3;
                 instrPtr += 5;
                 break;
@@ -87,44 +94,48 @@ int StackInterpreterLoop()
                 instrPtr += 1;
                 break;
 
-            case S_LDMI: *(int32_t*)sp = *(int32_t*)(heap + *sp + DECODE(u32, uint32_t, C, 0, UINT32_MAX));
+            case S_LDMI: *(int32_t*)sp = *(int32_t*)(heap + *sp + DECODE_ADDR());
                 instrPtr += 5;
                 break;
 
-            case S_LDMI_64: *(int64_t*)sp = *(int64_t*)(heap + *sp + DECODE(u32, uint32_t, C, 0, UINT32_MAX));
+            case S_LDMI_64: *(int64_t*)sp = *(int64_t*)(heap + *sp + DECODE_ADDR());
                 ++sp;
                 instrPtr += 5;
                 break;
 
-            case S_LDL: /**/
+            case S_LDL: *(int32_t*)++sp = *(int32_t*)((uint8_t*)stackFrameLocals + DECODE_8(u8, C, 0));
                 instrPtr += 2;
                 break;
 
-            case S_LDL_64: /**/
+            case S_LDL_64: *(int64_t*)++sp = *(int64_t*)((uint8_t*)stackFrameLocals + DECODE_8(u8, C, 0));
+                ++sp;
                 instrPtr += 2;
                 break;
 
-            case S_LDA: /**/
+            case S_LDA: *(int32_t*)++sp = *(int32_t*)((uint8_t*)stackFrame - DECODE_8(u8, C, 0));
                 instrPtr += 2;
                 break;
 
-            case S_LDA_64: /**/
+            case S_LDA_64: *(int64_t*)++sp = *(int64_t*)((uint8_t*)stackFrame - DECODE_8(u8, C, 0));
+                ++sp;
                 instrPtr += 2;
                 break;
 
-            case S_STL: /**/
+            case S_STL: *(int32_t*)((uint8_t*)stackFrameLocals + DECODE_8(u8, C, 0)) = *(int32_t*)sp--;
                 instrPtr += 2;
                 break;
 
-            case S_STL_64: /**/
+            case S_STL_64: *(int64_t*)((uint8_t*)stackFrameLocals + DECODE_8(u8, C, 0)) = *(int64_t*)--sp;
+                --sp;
                 instrPtr += 2;
                 break;
 
-            case S_STA: /**/
+            case S_STA: *(int32_t*)((uint8_t*)stackFrame - DECODE_8(u8, C, 0)) = *(int32_t*)sp--;
                 instrPtr += 2;
                 break;
 
-            case S_STA_64: /**/
+            case S_STA_64: *(int64_t*)((uint8_t*)stackFrame - DECODE_8(u8, C, 0)) = *(int64_t*)--sp;
+                --sp;
                 instrPtr += 2;
                 break;
 
@@ -378,13 +389,13 @@ int StackInterpreterLoop()
                 instrPtr += 1;
                 break;
 
-            case S_BRZ: instrPtr = !*sp-- ? program + DECODE_32(u32, C, 0) : instrPtr + 5;
+            case S_BRZ: instrPtr = !*sp-- ? program + DECODE_ADDR() : instrPtr + 5;
                 break;
 
-            case S_BRNZ: instrPtr = *sp-- ? program + DECODE_32(u32, C, 0) : instrPtr + 5;
+            case S_BRNZ: instrPtr = *sp-- ? program + DECODE_ADDR() : instrPtr + 5;
                 break;
 
-            case S_JMP: instrPtr = program + DECODE_32(u32, C, 0);
+            case S_JMP: instrPtr = program + DECODE_ADDR();
                 break;
 
             case S_BRIZ: sp -= 2; instrPtr = !*(sp+1) ? program + *(uint32_t*)(sp+2) : instrPtr + 1;
@@ -444,7 +455,7 @@ int StackInterpreterLoop()
                 instrPtr += 1;
                 break;
 
-            case S_FTOS: tmpInt = DECODE(u8, uint8_t, C, 0, 0xFF);
+            case S_FTOS: tmpInt = DECODE_8(u8, C, 0);
                 snprintf(strBuf, 32, "%.*f", (tmpInt == 0xFF ? 3 : tmpInt), *f32sp); 
                 *sp = HeapAllocString(strBuf);
                 instrPtr += 2;
@@ -462,7 +473,7 @@ int StackInterpreterLoop()
                 instrPtr += 1;
                 break;
 
-            case S_DTOS: tmpInt = DECODE(u8, uint8_t, C, 0, 0xFF);
+            case S_DTOS: tmpInt = DECODE_8(u8, C, 0);
                 snprintf(strBuf, 32, "%.*f", (tmpInt == 0xFF ? 3 : tmpInt), *(double*)((int32_t*)--sp)); 
                 *sp = HeapAllocString(strBuf);
                 instrPtr += 2;
@@ -506,19 +517,46 @@ int StackInterpreterLoop()
                 instrPtr += 1;
                 break;
 
-            case S_CALL: /**/
-                instrPtr += 5;
+            case S_CALL: tmp1 = (char *)stackFrame;
+                stackFrame = ++sp;                                        /* Set new stack frame */
+                stackFrameLocals = stackFrame + 1;
+                *(int32_t*)(sp) = (int32_t)((int32_t*)tmp1 - stackBegin); /* Put offset to previous stack frame. */
+                *(Addr_t*)++sp = (Addr_t)((instrPtr + 5) - program);      /* Put return address. */
+                instrPtr = program + DECODE_ADDR();
                 break;
 
-            case S_RET: /**/
-                instrPtr += 1;
+            case S_RET: 
+                instrPtr = program + *(stackFrame + 1); /* Jump to return address. */
+                /* Set SP to current stack frame - size of args. */
+                sp = (int32_t*)((uint8_t*)stackFrame - DECODE_8(u8, C, 0)) - 1; 
+                stackFrame = stackBegin + *stackFrame; /* Reset to previous stack frame. */
+                stackFrameLocals = stackFrame + 1;
+                break;
+
+            case S_RET_32: tmp1 = (char *)sp; /* Save ptr to last value on stack. */
+                instrPtr = program + *(stackFrame + 1);
+                sp = (int32_t*)((uint8_t*)stackFrame - DECODE_8(u8, C, 0)) - 1; 
+                stackFrame = stackBegin + *stackFrame;
+                stackFrameLocals = stackFrame + 1;
+
+                *(int32_t*)(++sp) = *(int32_t*)tmp1;
+                break;
+
+            case S_RET_64: tmp1 = (char *)(sp-1); /* Save ptr to last value on stack. */
+                instrPtr = program + *(stackFrame + 1);
+                sp = (int32_t*)((uint8_t*)stackFrame - DECODE_8(u8, C, 0)) - 1; 
+                stackFrame = stackBegin + *stackFrame;
+                stackFrameLocals = stackFrame + 1;
+
+                ++sp;
+                *(int64_t*)sp++ = *(int64_t*)tmp1;
                 break;
 
             case S_SCALL: 
             {   
                 /* Number of arguments system function call. */
                 tmpInt = sysArgPtr - sysArgs; 
-                switch ((SysFunc_t)DECODE(u8, uint8_t, C, 0, 0xFF))
+                switch ((SysFunc_t)DECODE_8(u8, C, 0))
                 {
                     case SYSFUNC_PRINT: SysPrint(tmpInt);
                         break;
@@ -541,11 +579,11 @@ int StackInterpreterLoop()
             /* To indicate a float type, set bit 5 to 1 (0x20). */
             /* To indicate a long type, set bit 4 to 1 (0x10). */
             /* The default value is an int (32-bits). */
-            case S_SARG: *sysArgPtr++ = DECODE(u8, uint8_t, C, 0, 0xFF);
+            case S_SARG: *sysArgPtr++ = DECODE_8(u8, C, 0);
                 instrPtr += 2;
                 break;
 
-            case S_STR: *++sp = HeapAllocString((const char *)(program + DECODE_32(u32, C, 0)));
+            case S_STR: *++sp = HeapAllocString((const char *)(program + DECODE_ADDR()));
                 instrPtr += 5;
                 break;
 
@@ -553,7 +591,7 @@ int StackInterpreterLoop()
                 instrPtr += 5;
                 break;
 
-            case S_STRCAT: *sp = HeapAllocCombinedString(heap + *sp, program + DECODE_32(u32, C, 0));
+            case S_STRCAT: *sp = HeapAllocCombinedString(heap + *sp, program + DECODE_ADDR());
                 instrPtr += 5;
                 break;
 

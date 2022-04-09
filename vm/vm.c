@@ -167,6 +167,8 @@ typedef enum {
     S_SIZE,
     S_CALL,
     S_RET,
+    S_RET_32,
+    S_RET_64,
     S_SCALL,
     S_SARG,
     S_STR,
@@ -242,6 +244,8 @@ typedef union {
 
 #ifdef UNION_DECODING
     #define DECODE(layout, type, field, offset, mask) instr.layout.field
+    #define DECODE_ADDR() instr.u32.C
+    #define DECODE_8( layout, field, offset) instr.layout.field
     #define DECODE_32(layout, field, offset) instr.layout.field
     #define DECODE_64(layout, field, offset) instr.layout.field
     #define DECODE_F32(layout, field, offset) instr.layout.field
@@ -249,6 +253,8 @@ typedef union {
     #define DECODE_OPCODE() instr.opcode
 #else
     #define DECODE(layout, type, field, offset, mask) ((*(type *)(instr.raw + 1 + offset) & mask) >> (offset * 8))
+    #define DECODE_ADDR() ((uint32_t)(DECODE(layout, uint32_t, field, offset, 0xFFFFFFFF)))
+    #define DECODE_8( layout, field, offset) ((uint8_t)(DECODE(layout, uint8_t, field, offset, 0xFF)))
     #define DECODE_32(layout, field, offset) ((int32_t)(DECODE(layout, int32_t, field, offset, 0xFFFFFFFF)))
     #define DECODE_64(layout, field, offset) ((int32_t)(DECODE(layout, int32_t, field, offset, 0xFFFFFFFFFFFFFFFF)))
     #define DECODE_F32(layout, field, offset) ((float)((*(uint32_t *)(instr.raw + 1 + offset) & 0xFFFFFFFF) >> (offset * 8)))
@@ -261,6 +267,7 @@ typedef union {
 static int32_t  *sp;         /* Stack pointer (top-of-stack). */
 static int32_t  *stackBegin; /* Pointer to the beginning of the stack. */
 static int32_t  *stackEnd;   /* Pointer to the beginning of the stack. */
+static int32_t  *stackFrame; /* Pointer to the current function's stack frame. */
 static Instr_t  instr;       /* Instruction "register". */
 static uint8_t  *instrPtr;   /* Pointer to the next instruction. */
 static uint8_t  *program;    /* Pointer to start of program memory. */
@@ -283,6 +290,16 @@ static char     strBuf[128];
  * and HERE ONLY, as this only meant to be a copy-paste situation. */
 #include "stack_impl.h"
 #include "register_impl.h"
+
+/* RackVM Stack Frame: (offsets are in bytes. 4 bytes = 1 word in RackVM.)
+      
+           +* nth local variable
+           +8 first local variable
+           +4 return address          (refers to program memory)
+stackFrame -> offset to previous ptr. (refers to stack)
+           -4 1st function argument
+           -* nth function argument
+*/
 
 static bool ReadProgram(const char *fileName)
 {
@@ -343,6 +360,7 @@ static void AllocateStack()
     stackBegin = malloc(STACK_SIZE * sizeof(int32_t));
     stackEnd = stackBegin + STACK_SIZE;
     sp = stackBegin;
+    stackFrame = stackBegin; /* For function call stack. */
 
     *sp++ = 0xAC1D;
     *sp = 0xFACE;
@@ -351,9 +369,9 @@ static void AllocateStack()
 static void DumpStack()
 {
     /* Print the stack up until sp */
-    printf("======== STACK DUMP ==============================================\n");
-    printf("          %-3s %-10s %-20s %-12s %-12s %-s \n", "[]", "i32", "i64", "f32", "f64", "hex");
-    puts("------------------------------------------------------------------");
+    puts(  "======== STACK DUMP ===================================================================");
+    printf("          %-3s %-10s %-20s %-12s %-12s   %-s \n", "[]", "i32", "i64", "f32", "f64", "hex");
+    puts(  "---------------------------------------------------------------------------------------");
 
     int32_t *currSp = sp;
 
@@ -380,7 +398,7 @@ static void DumpStack()
 
 #undef PRINT_SP
 
-    puts("------------------------------------------------------------------");
+    puts("---------------------------------------------------------------------------------------");
 }
 
 static void Cleanup()

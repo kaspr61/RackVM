@@ -204,13 +204,15 @@ namespace Assembly
     DECL_STACK_INSTR0(0x6A, RESZ                )
     DECL_STACK_INSTR0(0x6B, SIZE                )
     DECL_STACK_INSTR1(0x6C, CALL,       uint32_t)
-    DECL_STACK_INSTR0(0x6D, RET                 )
-    DECL_STACK_INSTR1(0x6E, SCALL,      uint8_t )
-    DECL_STACK_INSTR1(0x6F, SARG,       uint8_t )
-    DECL_STACK_INSTR1(0x70, STR,        uint32_t)
-    DECL_STACK_INSTR1(0x71, STRCPY,     uint32_t)
-    DECL_STACK_INSTR1(0x72, STRCAT,     uint32_t)
-    DECL_STACK_INSTR0(0x73, STRCMB              )
+    DECL_STACK_INSTR1(0x6D, RET,        uint8_t )
+    DECL_STACK_INSTR1(0x6E, RET_32,     uint8_t )
+    DECL_STACK_INSTR1(0x6F, RET_64,     uint8_t )
+    DECL_STACK_INSTR1(0x70, SCALL,      uint8_t )
+    DECL_STACK_INSTR1(0x71, SARG,       uint8_t )
+    DECL_STACK_INSTR1(0x72, STR,        uint32_t)
+    DECL_STACK_INSTR1(0x73, STRCPY,     uint32_t)
+    DECL_STACK_INSTR1(0x74, STRCAT,     uint32_t)
+    DECL_STACK_INSTR0(0x75, STRCMB              )
     //----------------------------------//
 
     InstructionEncoder::InstructionEncoder()
@@ -352,7 +354,9 @@ namespace Assembly
             LOAD_STACK_INSTR0("RESZ",    RESZ,       1                  );
             LOAD_STACK_INSTR0("SIZE",    SIZE,       1                  );
             LOAD_STACK_INSTR ("CALL",    CALL,       5,       UINT32_MAX);
-            LOAD_STACK_INSTR0("RET",     RET,        1                  );
+            LOAD_STACK_INSTR ("RET",     RET,        2,       UINT8_MAX );
+            LOAD_STACK_INSTR ("RET.32",  RET_32,     2,       UINT8_MAX );
+            LOAD_STACK_INSTR ("RET.64",  RET_64,     2,       UINT8_MAX );
             LOAD_STACK_INSTR ("SCALL",   SCALL,      2,       UINT8_MAX );
             LOAD_STACK_INSTR ("SARG",    SARG,       2,       UINT8_MAX );
             LOAD_STACK_INSTR ("STR",     STR,        5,       UINT32_MAX);
