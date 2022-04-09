@@ -220,6 +220,23 @@ Addr_t HeapAllocString(const char *content)
     return str;
 }
 
+Addr_t HeapAllocCombinedString(const char *content1, const char *content2)
+{
+    size_t content1Size = strlen(content1);
+    size_t content2Size = strlen(content2);
+    size_t size = content1Size + content2Size + 1;
+    Addr_t str = HeapAlloc(size);
+
+    memcpy(heap + str, content1, content1Size);
+    memcpy(heap + str + content1Size, content2, content2Size);
+    *(char*)(heap + str + size) = '\0';
+
+    printf("Created new string \"%s\" at %lu.\n", 
+        (const char *)(heap+str), str);
+
+    return str;
+}
+
 Addr_t HeapAllocSubStr(const char *content, uint32_t size)
 {
     size_t realSize = strlen(content);

@@ -209,6 +209,8 @@ namespace Assembly
     DECL_STACK_INSTR1(0x6F, SARG,       uint8_t )
     DECL_STACK_INSTR1(0x70, STR,        uint32_t)
     DECL_STACK_INSTR1(0x71, STRCPY,     uint32_t)
+    DECL_STACK_INSTR1(0x72, STRCAT,     uint32_t)
+    DECL_STACK_INSTR0(0x73, STRCMB              )
     //----------------------------------//
 
     InstructionEncoder::InstructionEncoder()
@@ -355,6 +357,8 @@ namespace Assembly
             LOAD_STACK_INSTR ("SARG",    SARG,       2,       UINT8_MAX );
             LOAD_STACK_INSTR ("STR",     STR,        5,       UINT32_MAX);
             LOAD_STACK_INSTR ("STRCPY",  STRCPY,     5,       UINT32_MAX);
+            LOAD_STACK_INSTR ("STRCAT",  STRCAT,     5,       UINT32_MAX);
+            LOAD_STACK_INSTR0("STRCMB",  STRCMB,     1                  );
         }
     }
 

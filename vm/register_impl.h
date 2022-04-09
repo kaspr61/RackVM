@@ -25,24 +25,10 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef INC_VM_MEMORY_H
-#define INC_VM_MEMORY_H
-
-#include <stdbool.h>
-
-typedef uint32_t Addr_t;
-
-extern uint8_t *heap; /* Pointer to the start of the heap. */
-
-bool     AllocateHeap(uint64_t size, uint64_t maxSize);
-void     DeallocateHeap();
-
-Addr_t   HeapAlloc(uint32_t size);
-Addr_t   HeapRealloc(Addr_t address, uint32_t size);
-void     HeapFree(Addr_t address);
-Addr_t   HeapAllocString(const char *content);
-Addr_t   HeapAllocSubStr(const char *content, uint32_t size);
-Addr_t   HeapAllocCombinedString(const char *content1, const char *content2);
-uint32_t GetHeapAllocSize(Addr_t address);
-
-#endif /* INC_VM_MEMORY_H */
+/* Implements an interpreter loop with switch dispatch for the 
+ * register architecture. Through the use of a union, operands may be 
+ * accessed arbitrarily, without the need for decoding them first. */
+int RegisterInterpreterLoop()
+{
+    return VM_EXIT_SUCCESS;
+}

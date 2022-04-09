@@ -622,7 +622,7 @@ namespace Compiler
                 case DataType::LONG:   instr = "FTOL"; break;
                 case DataType::DOUBLE: instr = "FTOD"; break;
                 case DataType::STRING: instr = "FTOS";
-                    arg = argExpr ? std::to_string(argExpr->intValue) : "0"; // Default to 0 decimals (just %f).
+                    arg = argExpr ? std::to_string(argExpr->intValue) : "255"; // Set to VM default.
                     break;
             }
         }
@@ -635,7 +635,7 @@ namespace Compiler
                 case DataType::FLOAT:  instr = "DTOF"; break;
                 case DataType::LONG:   instr = "DTOL"; break;
                 case DataType::STRING: instr = "DTOS";
-                    arg = argExpr ? std::to_string(argExpr->intValue) : "0"; // Default to 0 decimals (just %f).
+                    arg = argExpr ? std::to_string(argExpr->intValue) : "255"; // Set to VM default.
                     break;
             }
         }

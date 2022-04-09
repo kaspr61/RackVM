@@ -44,6 +44,7 @@ namespace Assembly
 			{"__read",  Label(3)},
 			{"__open",  Label(4)},
 			{"__close", Label(5)},
+			{"__str",   Label(6)},
 		});
 	}
 

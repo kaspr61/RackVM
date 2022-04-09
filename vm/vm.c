@@ -29,6 +29,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "vm_memory.h"
 
@@ -170,9 +171,21 @@ typedef enum {
     S_SARG,
     S_STR,
     S_STRCPY,
+    S_STRCAT,
+    S_STRCMB,
 
     OPCODE_COUNT
 } Opcode_t;
+
+typedef enum {
+    SYSFUNC_PRINT = 0,
+    SYSFUNC_INPUT = 1,
+    SYSFUNC_WRITE = 2,
+    SYSFUNC_READ  = 3,
+    SYSFUNC_OPEN  = 4,
+    SYSFUNC_CLOSE = 5,
+    SYSFUNC_STR   = 6
+} SysFunc_t;
 
 #ifdef __GNUC__
     #define GCC_PACK __attribute__ ((__packed__))
@@ -206,6 +219,16 @@ typedef union {
         uint8_t opcode;
         int64_t C;
     } i64;
+
+    struct GCC_PACK {
+        uint8_t opcode;
+        float C;
+    } f32;
+
+    struct GCC_PACK {
+        uint8_t opcode;
+        double C;
+    } f64;
 #endif
     struct GCC_PACK {
         uint8_t  opcode;
@@ -219,463 +242,49 @@ typedef union {
 
 #ifdef UNION_DECODING
     #define DECODE(layout, type, field, offset, mask) instr.layout.field
-    #define DECODE_32(layout, type, field, offset) instr.layout.field
-    #define DECODE_64(layout, type, field, offset) instr.layout.field
+    #define DECODE_32(layout, field, offset) instr.layout.field
+    #define DECODE_64(layout, field, offset) instr.layout.field
+    #define DECODE_F32(layout, field, offset) instr.layout.field
+    #define DECODE_F64(layout, field, offset) instr.layout.field
     #define DECODE_OPCODE() instr.opcode
 #else
     #define DECODE(layout, type, field, offset, mask) ((*(type *)(instr.raw + 1 + offset) & mask) >> (offset * 8))
-    #define DECODE_32(layout, type, field, offset) DECODE(layout, type, field, offset, 0xFFFFFFFF)
-    #define DECODE_64(layout, type, field, offset) DECODE(layout, type, field, offset, 0xFFFFFFFFFFFFFFFF)
+    #define DECODE_32(layout, field, offset) ((int32_t)(DECODE(layout, int32_t, field, offset, 0xFFFFFFFF)))
+    #define DECODE_64(layout, field, offset) ((int32_t)(DECODE(layout, int32_t, field, offset, 0xFFFFFFFFFFFFFFFF)))
+    #define DECODE_F32(layout, field, offset) ((float)((*(uint32_t *)(instr.raw + 1 + offset) & 0xFFFFFFFF) >> (offset * 8)))
+    #define DECODE_F64(layout, field, offset) ((double)((*(uint64_t *)(instr.raw + 1 + offset) & 0xFFFFFFFFFFFFFFFF) >> (offset * 8)))
     #define DECODE_OPCODE() (*(uint8_t *)(&instr) & 0xFF)
 #endif
 
 /**** GLOBALS ****/
 
-static int32_t *stackBegin; /* Pointer to the beginning of the stack. */
-static int32_t *stackEnd;   /* Pointer to the beginning of the stack. */
-static int32_t *sp;         /* Stack pointer (top-of-stack). */
-static Instr_t instr;       /* Instruction "register". */
-static uint8_t *instrPtr;   /* Pointer to the next instruction. */
-static uint8_t *program;    /* Pointer to start of program memory. */
-static uint8_t *programEnd; /* Pointer to end of program memory (incl. data). */
-static uint8_t *instrEnd;   /* Pointer to end of instructions in program memory. */
+static int32_t  *sp;         /* Stack pointer (top-of-stack). */
+static int32_t  *stackBegin; /* Pointer to the beginning of the stack. */
+static int32_t  *stackEnd;   /* Pointer to the beginning of the stack. */
+static Instr_t  instr;       /* Instruction "register". */
+static uint8_t  *instrPtr;   /* Pointer to the next instruction. */
+static uint8_t  *program;    /* Pointer to start of program memory. */
+static uint8_t  *programEnd; /* Pointer to end of program memory (incl. data). */
+static uint8_t  *instrEnd;   /* Pointer to end of instructions in program memory. */
 static VMMode_t vmMode;
-static char     strBuf[32];
-
-/* 
- * Implements an interpreter loop with switch dispatch for the 
- * stack architecture. Through the use of a union, operands may be 
- * accessed arbitrarily, without the need for decoding them first.
-*/
-int StackInterpreterLoop()
-{
-    while (instrPtr < instrEnd)
-    {
-        instr = *(Instr_t *)instrPtr;
-
-        switch (DECODE_OPCODE())
-        {
-            case NOP: instrPtr += 1;
-                break;
-
-            case EXIT:
-                return VM_EXIT_SUCCESS;
-
-            /**** Load & Store ****/
-
-            case S_LDI: *(int32_t*)++sp = DECODE_32(i32, int32_t, C, 0);
-                instrPtr += 5;
-                break;
-
-            case S_LDI_64: ++sp; *(int64_t*)sp++ = DECODE_64(i64, int64_t, C, 0);
-                instrPtr += 9;
-                break;
-
-            /**** Arithmetics ****/
-
-/* Consumes 2 32-bit values and pushes a 32-bit value. */
-#define STACK_OP_32(type, op) *(type)--sp = *(type)(sp-1) MACRO_LITERAL(op) *(type)(sp)
-
-/* Consumes 2 64-bit values and pushes a 64-bit value. */
-#define STACK_OP_64(type, op) sp -= 3; *(type)sp++ = *(type)sp MACRO_LITERAL(op) *(type)(sp+2)
-
-            case S_ADD: STACK_OP_32(int32_t *, +);
-                instrPtr += 1;
-                break;
-
-            case S_ADD_64: STACK_OP_64(int64_t *, +);
-                instrPtr += 1;
-                break;
-
-            case S_ADD_F: STACK_OP_32(float *, +);
-                instrPtr += 1;
-                break;
-
-            case S_ADD_F64: STACK_OP_64(double *, +);
-                instrPtr += 1;
-                break;
-
-            case S_SUB: STACK_OP_32(int32_t *, -);
-                instrPtr += 1;
-                break;
-
-            case S_SUB_64: STACK_OP_64(int64_t *, -);
-                instrPtr += 1;
-                break;
-
-            case S_SUB_F: STACK_OP_32(float *, -);
-                instrPtr += 1;
-                break;
-
-            case S_SUB_F64: STACK_OP_64(double *, -);
-                instrPtr += 1;
-                break;
-
-            case S_MUL: STACK_OP_32(int32_t *, *);
-                instrPtr += 1;
-                break;
-
-            case S_MUL_64: STACK_OP_64(int64_t *, *);
-                instrPtr += 1;
-                break;
-
-            case S_MUL_F: STACK_OP_32(float *, *);
-                instrPtr += 1;
-                break;
-
-            case S_MUL_F64: STACK_OP_64(double *, *);
-                instrPtr += 1;
-                break;
-
-            case S_DIV: STACK_OP_32(int32_t *, /);
-                instrPtr += 1;
-                break;
-
-            case S_DIV_64: STACK_OP_64(int64_t *, /);
-                instrPtr += 1;
-                break;
-
-            case S_DIV_F: STACK_OP_32(float *, /);
-                instrPtr += 1;
-                break;
-
-            case S_DIV_F64: STACK_OP_64(double *, /);
-                instrPtr += 1;
-                break;
-
-            /**** Bit Stuff ****/
-
-            case S_INV: *(int32_t*)sp = ~(int32_t)*sp;
-                instrPtr += 1;
-                break;
-
-            case S_INV_64: *(int64_t*)(sp-1) = ~(int64_t)*(sp-1);
-                instrPtr += 1;
-                break;
-
-            case S_NEG: *(int32_t*)sp = -(*(int32_t*)sp);
-                instrPtr += 1;
-                break;
-
-            case S_NEG_64: *(int64_t*)(sp-1) = -(*(int64_t*)(sp-1));
-                instrPtr += 1;
-                break;
-
-            case S_NEG_F: *(float*)sp = -(*(float*)sp);
-                instrPtr += 1;
-                break;
-
-            case S_NEG_F64: *(double*)(sp-1) = -(*(double*)(sp-1));
-                instrPtr += 1;
-                break;
-
-            case S_BOR: STACK_OP_32(int32_t *, |);
-                instrPtr += 1;
-                break;
-
-            case S_BOR_64: STACK_OP_64(int64_t *, |);
-                instrPtr += 1;
-                break;
-
-            case S_BXOR: STACK_OP_32(int32_t *, ^);
-                instrPtr += 1;
-                break;
-
-            case S_BXOR_64: STACK_OP_64(int64_t *, ^);
-                instrPtr += 1;
-                break;
-
-            case S_BAND: STACK_OP_32(int32_t *, &);
-                instrPtr += 1;
-                break;
-
-            case S_BAND_64: STACK_OP_64(int64_t *, &);
-                instrPtr += 1;
-                break;
-
-            case S_OR: STACK_OP_32(int32_t *, ||);
-                instrPtr += 1;
-                break;
-
-            case S_AND: STACK_OP_32(int32_t *, &&);
-                instrPtr += 1;
-                break;
-
-            /**** Comparisons ****/
-
-/* Consumes 2 32-bit values and pushes a bool value (int32_t). */
-#define STACK_OP_32_BOOL(type, op) *(int32_t*)--sp = *(type)(sp-1) MACRO_LITERAL(op) *(type)(sp)
-
-/* Consumes 2 64-bit values and pushes a bool value (int32_t). */
-#define STACK_OP_64_BOOL(type, op) sp -= 3; *(int32_t*)sp = *(type)sp MACRO_LITERAL(op) *(type)(sp+2)
-
-            case S_CPZ: *(int32_t*)sp = !(*(int32_t*)sp);
-                instrPtr += 1;
-                break;
-
-            case S_CPZ_64: *(int64_t*)(sp-1) = !(*(int64_t*)(sp-1));
-                instrPtr += 1;
-                break;
-
-            case S_CPEQ: STACK_OP_32_BOOL(int32_t*, ==);
-                instrPtr += 1;
-                break;
-
-            case S_CPEQ_64: STACK_OP_64_BOOL(int64_t*, ==);
-                instrPtr += 1;
-                break;
-
-            case S_CPEQ_F: STACK_OP_32_BOOL(float*, ==);
-                instrPtr += 1;
-                break;
-
-            case S_CPEQ_F64: STACK_OP_64_BOOL(double*, ==);
-                instrPtr += 1;
-                break;
-
-            case S_CPNQ: STACK_OP_32_BOOL(int32_t*, !=);
-                instrPtr += 1;
-                break;
-
-            case S_CPNQ_64: STACK_OP_64_BOOL(int64_t*, !=);
-                instrPtr += 1;
-                break;
-
-            case S_CPNQ_F: STACK_OP_32_BOOL(float*, !=);
-                instrPtr += 1;
-                break;
-
-            case S_CPNQ_F64: STACK_OP_64_BOOL(double*, !=);
-                instrPtr += 1;
-                break;
-
-            case S_CPGT: STACK_OP_32_BOOL(int32_t*, >);
-                instrPtr += 1;
-                break;
-
-            case S_CPGT_64: STACK_OP_64_BOOL(int64_t*, >);
-                instrPtr += 1;
-                break;
-
-            case S_CPGT_F: STACK_OP_32_BOOL(float*, >);
-                instrPtr += 1;
-                break;
-
-            case S_CPGT_F64: STACK_OP_64_BOOL(double*, >);
-                instrPtr += 1;
-                break;
-
-            case S_CPLT: STACK_OP_32_BOOL(int32_t*, <);
-                instrPtr += 1;
-                break;
-
-            case S_CPLT_64: STACK_OP_64_BOOL(int64_t*, <);
-                instrPtr += 1;
-                break;
-
-            case S_CPLT_F: STACK_OP_32_BOOL(float*, <);
-                instrPtr += 1;
-                break;
-
-            case S_CPLT_F64: STACK_OP_64_BOOL(double*, <);
-                instrPtr += 1;
-                break;
-
-            case S_CPGQ: STACK_OP_32_BOOL(int32_t*, >=);
-                instrPtr += 1;
-                break;
-
-            case S_CPGQ_64: STACK_OP_64_BOOL(int64_t*, >=);
-                instrPtr += 1;
-                break;
-
-            case S_CPGQ_F: STACK_OP_32_BOOL(float*, >=);
-                instrPtr += 1;
-                break;
-
-            case S_CPGQ_F64: STACK_OP_64_BOOL(double*, >=);
-                instrPtr += 1;
-                break;
-
-            case S_CPLQ: STACK_OP_32_BOOL(int32_t*, <=);
-                instrPtr += 1;
-                break;
-
-            case S_CPLQ_64: STACK_OP_64_BOOL(int64_t*, <=);
-                instrPtr += 1;
-                break;
-
-            case S_CPLQ_F: STACK_OP_32_BOOL(float*, <=);
-                instrPtr += 1;
-                break;
-
-            case S_CPLQ_F64: STACK_OP_64_BOOL(double*, <=);
-                instrPtr += 1;
-                break;
-
-            case S_CPSTR: /**/
-                instrPtr += 1;
-                break;
-
-            case S_CPCHR: /**/
-                instrPtr += 1;
-                break;
-
-            case S_BRZ: instrPtr = !*sp-- ? program + DECODE_32(u32, uint32_t, C, 0) : instrPtr + 5;
-                break;
-
-            case S_BRNZ: instrPtr = *sp-- ? program + DECODE_32(u32, uint32_t, C, 0) : instrPtr + 5;
-                break;
-
-            case S_JMP: instrPtr = program + DECODE_32(u32, uint32_t, C, 0);
-                break;
-
-            case S_BRIZ: sp -= 2; instrPtr = !*(sp+1) ? program + *(uint32_t*)(sp+2) : instrPtr + 1;
-                break;
-
-            case S_BRINZ: sp -= 2; instrPtr = *(sp+1) ? program + *(uint32_t*)(sp+2) : instrPtr + 1;
-                break;
-
-            case S_JMPI: instrPtr = program + *(uint32_t*)sp--;
-                break;
-
-            /**** Conversions ****/
-
-            case S_ITOL: *(int64_t*)sp++ = (int64_t)*sp;
-                instrPtr += 1;
-                break;
-
-            case S_ITOF: *(float*)sp = (float)*sp;
-                instrPtr += 1;
-                break;
-
-            case S_ITOD: *(double*)sp++ = (double)*sp;
-                instrPtr += 1;
-                break;
-
-            case S_ITOS: snprintf(strBuf, 32, "%d", *(int32_t*)sp); 
-                *sp = HeapAllocString(strBuf);
-                instrPtr += 1;
-                break;
-
-            case S_LTOI: *(int32_t*)--sp = (int32_t)*(sp-1);
-                instrPtr += 1;
-                break;
-
-            case S_LTOF: *(float*)--sp = (float)*(sp-1);
-                instrPtr += 1;
-                break;
-
-            case S_LTOD: *(double*)(sp-1) = (double)*(sp-1);
-                instrPtr += 1;
-                break;
-
-            case S_LTOS: /**/
-                instrPtr += 1;
-                break;
-
-            case S_FTOI: *(int32_t*)sp = (int32_t)*sp;
-                instrPtr += 1;
-                break;
-
-            case S_FTOL: *(int64_t*)sp++ = (int64_t)*sp;
-                instrPtr += 1;
-                break;
-
-            case S_FTOD: *(double*)sp++ = (double)*sp;
-                instrPtr += 1;
-                break;
-
-            case S_FTOS: /**/
-                instrPtr += 2;
-                break;
-
-            case S_DTOI: *(int32_t*)--sp = (int32_t)*(sp-1);
-                instrPtr += 1;
-                break;
-
-            case S_DTOF: *(float*)--sp = (float)*(sp-1);
-                instrPtr += 1;
-                break;
-
-            case S_DTOL: *(int64_t*)(sp-1) = (int64_t)*(sp-1);
-                instrPtr += 1;
-                break;
-
-            case S_DTOS: /**/
-                instrPtr += 2;
-                break;
-
-            case S_STOI: /**/
-                instrPtr += 5;
-                break;
-
-            case S_STOL: /**/
-                instrPtr += 9;
-                break;
-
-            case S_STOF: /**/
-                instrPtr += 5;
-                break;
-
-            case S_STOD: /**/
-                instrPtr += 9;
-                break;
-
-            /**** Miscellaneous ****/
-
-            case S_NEW: *sp = HeapAlloc(*sp);
-                instrPtr += 1;
-                break;
-
-            case S_DEL: HeapFree(*sp--);
-                instrPtr += 1;
-                break;
-
-            case S_RESZ: *--sp = HeapRealloc(*sp, *(sp-1));
-                instrPtr += 1;
-                break;
-
-            case S_SIZE: *sp = GetHeapAllocSize(*sp);
-                instrPtr += 1;
-                break;
-
-            case S_CALL: /**/
-                instrPtr += 5;
-                break;
-
-            case S_RET: /**/
-                instrPtr += 1;
-                break;
-
-            case S_SCALL: /**/
-                instrPtr += 2;
-                break;
-
-            case S_SARG: /**/
-                instrPtr += 2;
-                break;
-
-            case S_STR: *++sp = HeapAllocString((const char *)(program + DECODE_32(u32, Addr_t, C, 0)));
-                instrPtr += 5;
-                break;
-
-            case S_STRCPY: *sp = HeapAllocSubStr((const char *)(heap + *sp), DECODE_32(u32, uint32_t, C, 0));
-                instrPtr += 5;
-                break;
-
-            default: 
-                return VM_EXIT_FAILURE;
-        }
-
-        if (sp >= stackEnd)
-            return VM_EXIT_STACK_OVERFLOW;
-    }
-
-    return VM_EXIT_SUCCESS;
-}
-
-bool ReadProgram(const char *fileName)
+static uint8_t  sysArgs[8];  /* Holds temporary size information about system function arguments. */
+static uint8_t  *sysArgPtr;  /* This and sysArgs is used only for variadic system function calls. */
+static char     strBuf[128];
+
+/* Shorthand macros for casting the stack pointer. */
+#define i32sp ((int32_t*)sp)
+#define u32sp ((unt32_t*)sp)
+#define i64sp ((int64_t*)sp)
+#define f32sp ((float*)sp)
+#define f64sp ((double*)sp)
+
+/* The implementations of the stack and register interpreter loops are 
+ * separated into their own files for readability. They are included here,
+ * and HERE ONLY, as this only meant to be a copy-paste situation. */
+#include "stack_impl.h"
+#include "register_impl.h"
+
+static bool ReadProgram(const char *fileName)
 {
     FILE *file = fopen(fileName, "rb");
     if (!file)
@@ -722,12 +331,14 @@ bool ReadProgram(const char *fileName)
     
     fclose(file);
 
+    /* Setup some other pointers. */
     instrPtr = program;
+    sysArgPtr = sysArgs;
 
     return true;
 }
 
-void AllocateStack()
+static void AllocateStack()
 {
     stackBegin = malloc(STACK_SIZE * sizeof(int32_t));
     stackEnd = stackBegin + STACK_SIZE;
@@ -737,26 +348,42 @@ void AllocateStack()
     *sp = 0xFACE;
 }
 
-void DumpStack()
+static void DumpStack()
 {
     /* Print the stack up until sp */
     printf("======== STACK DUMP ==============================================\n");
-    printf("          %-3s %-10s %-20s %-s \n", "[]", "i32", "i64", "hex");
+    printf("          %-3s %-10s %-20s %-12s %-12s %-s \n", "[]", "i32", "i64", "f32", "f64", "hex");
     puts("------------------------------------------------------------------");
-    printf("SP ==32=> %-3lu %-10ld %-20lld 0x%0X \n", 
-        sp - stackBegin, *sp, *(int64_t*)sp, *sp);
-    printf("   --64-> %-3lu %-10ld %-20lld 0x%0X \n", 
-        (sp-1) - stackBegin, *(sp-1), *(int64_t*)(sp-1), *(sp-1));
+
+    int32_t *currSp = sp;
+
+    snprintf(strBuf, 12, "%-11f", *(float*)currSp);
+    snprintf(strBuf+16, 16, "%-16lf", *(double*)currSp);
+    printf("SP ==32=> %-3lu %-10ld %-20lld %-12s %-12s 0x%-0X \n", 
+        currSp - stackBegin, *currSp, *(int64_t*)currSp, strBuf, strBuf+16, *currSp);
+
+    currSp = sp-1;
+    snprintf(strBuf, 12, "%-11f", *(float*)currSp);
+    snprintf(strBuf+16, 16, "%-16lf", *(double*)currSp);
+    printf("   --64-> %-3lu %-10ld %-20lld %-12s %-12s 0x%-0X \n", 
+        currSp - stackBegin, *currSp, *(int64_t*)currSp, strBuf, strBuf+16, *currSp);
 
     int32_t *i;
     for (i = sp - 2; i >= stackBegin; --i)
-        printf("          %-3lu %-10ld %-20lld 0x%0X \n", 
-            i - stackBegin, *i, *(int64_t*)i, *i);
+    {
+        currSp = i;
+        snprintf(strBuf, 12, "%-11f", *(float*)currSp);
+        snprintf(strBuf+16, 16, "%-16lf", *(double*)currSp);
+        printf("          %-3lu %-10ld %-20lld %-12s %-12s 0x%-0X \n",
+            currSp - stackBegin, *currSp, *(int64_t*)currSp, strBuf, strBuf+16, *currSp);
+    }
+
+#undef PRINT_SP
 
     puts("------------------------------------------------------------------");
 }
 
-void Cleanup()
+static void Cleanup()
 {
     DeallocateHeap();
     free(stackBegin);
@@ -776,7 +403,7 @@ int main(int argc, const char **argv)
      * and the union "decoding" technique would be meaningless.*/
     if (sizeof(Instr_t) != 13)
     {
-        printf("Invalid size of instructions (%llu).\nAborting.\n", sizeof(Instr_t));
+        printf("Invalid size of instruction struct (%llu).\nAborting.\n", sizeof(Instr_t));
         return 0;
     }
 
