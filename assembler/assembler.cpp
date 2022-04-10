@@ -46,6 +46,44 @@ namespace Assembly {
     {
     }
 
+    std::string Assembler::UnescapeString(const std::string& str)
+    {
+        std::string dst;
+        dst.reserve(str.size());
+
+        char curr;
+        char next;
+        for (auto it = str.begin(); it < str.end(); ++it)
+        {
+            curr = *it;
+            next = *(it+1);
+            if (curr != '\\')
+            {
+                dst.push_back(curr);
+                continue;
+            }
+            
+            switch (next)
+            {
+                case '\'': dst.push_back('\''); break;
+                case '"' : dst.push_back('"');  break;
+                case '\\': dst.push_back('\\'); break;
+                case 'a' : dst.push_back('\a'); break;
+                case 'b' : dst.push_back('\b'); break;
+                case 'f' : dst.push_back('\f'); break;
+                case 'n' : dst.push_back('\n'); break;
+                case 'r' : dst.push_back('\r'); break;
+                case 't' : dst.push_back('\t'); break;
+                case 'v' : dst.push_back('\v'); break;
+                default  : dst.push_back(next); break;
+            }
+
+            ++it;
+        }
+
+        return dst;
+    }
+
     std::string Assembler::ToLowerCase(const std::string& str) const
     {
         std::string result = str;
@@ -223,20 +261,23 @@ namespace Assembly {
         {
             bool isString = args[1].find('"') != std::string::npos;
 
-            if (args[0].find_first_not_of("0123456789") != std::string::npos)
+            if (!isString)
             {
-                LineError("Invalid size argument for directive \".BYTE\". Must be an unsigned integer.");
-                return;
-            }
-            else if (args[1].find_first_not_of("\".f0123456789") != std::string::npos && !isString)
-            {
-                LineError("Invalid data argument for directive \".BYTE\". Must be an unsigned integer, float, double, or string.");
-                return;
-            }
-            else if (args[1] == "")
-            {
-                LineError("No data defined for directive \".BYTE\".");
-                return;
+                if (args[0].find_first_not_of("0123456789") != std::string::npos)
+                {
+                    LineError("Invalid size argument for directive \".BYTE\". Must be an unsigned integer.");
+                    return;
+                }
+                else if (args[1].find_first_not_of("\".f0123456789") != std::string::npos && !isString)
+                {
+                    LineError("Invalid data argument for directive \".BYTE\". Must be an unsigned integer, float, double, or string.");
+                    return;
+                }
+                else if (args[1] == "")
+                {
+                    LineError("No data defined for directive \".BYTE\".");
+                    return;
+                }
             }
 
             workingText << directive << ';' << args[0] << ';' << args[1] << ';' << std::endl;
@@ -271,8 +312,9 @@ namespace Assembly {
         if (isSemicolonComment || isSlashComment)
             return;
 
+        size_t posStr = line.find('"', pos);
         size_t posDelim = line.find(':', pos); // Look for label delimiter.
-        if (posDelim != line.npos)
+        if (posDelim != line.npos && (posDelim < posStr || posStr == line.npos))
         {
             std::string label = line.substr(pos, posDelim);
 
@@ -333,8 +375,8 @@ namespace Assembly {
 
                 if (posString != line.npos && posString < posComment && posString < posDelim)
                 {
-                    posDelim = line.find('"', posString + 1);
-                    if (posDelim == line.npos)
+                    posDelim = line.rfind('"');
+                    if (posDelim == line.npos || posDelim == posString)
                     {
                         LineError("Invalid argument. String has no ending \".");
                         break;
@@ -364,6 +406,7 @@ namespace Assembly {
 
                     args[i] = RemoveWhitespace(line.substr(pos, posDelim - pos));
                     ++argsGiven;
+                    break;
                 }
             }
         }
@@ -448,6 +491,7 @@ namespace Assembly {
             {
                 // If it's a string, remove "" characters.
                 parsedArgs[1] = parsedArgs[1].substr(1, parsedArgs[1].length() - 2);
+                parsedArgs[1] = UnescapeString(parsedArgs[1]);
                 binaryOutput.write(parsedArgs[1].c_str() + '\0', sizeArg);
             }
             else if (parsedArgs[1].find('.') != std::string::npos) // If it's floating-point data.
@@ -562,19 +606,57 @@ namespace Assembly {
 
 using namespace Assembly;
 
+void PrintHelp()
+{
+    std::cout << 
+        "====| rackasm - Assembler for RackVM |====" << std::endl <<
+        "By: Kasper Skott, 2022" << std::endl <<
+        "(Detecting " << (IsLittleEndian() ? "little endian" : "big endian") << ")" << std::endl <<
+        "    Usage: rackasm [flags]? FILE [flags]?" << std::endl <<
+        "    -v    Verbose, prints translation to stdout." << std::endl << 
+        "    -f    Prints the first pass to stdout." << std::endl <<
+        "    -l    Suppress unusused labels warning." << std::endl;
+}
+
 int main(int argc, char* argv[])
 {
-    std::cout << (IsLittleEndian() ? "Little endian" : "Big endian") << std::endl;
-
     if (argc < 2)
     {
-        std::cout << "Invalid arguments." << std::endl;
+        PrintHelp();
         return 0;
     }
 
-    std::string inputPath = argv[1]; 
-    std::ifstream inputFile(inputPath);
+    Assembler assembler;
 
+    // Parse arguments.
+    std::string inputPath = "";
+    std::vector<std::string> args(argv, argv+argc);
+    for (auto argIt = ++args.begin(); argIt != args.end(); ++argIt)
+    {
+        if (argIt->at(0) != '-') // This is the input file.
+        {
+            if (inputPath == "")
+                inputPath = *argIt;
+            else
+                std::cerr << "File path argument has already been defined." << std::endl;
+
+            continue;
+        }
+
+        switch (argIt->at(1))
+        {
+            case 'v': assembler.AddFlags(FLAG_VERBOSE);
+                break;
+            case 'f': assembler.AddFlags(FLAG_SHOW_FIRST_PASS);
+                break;
+            case 'l': assembler.AddFlags(FLAG_SUPPRESS_UNUSED_LABELS);
+                break;
+            case 'h': PrintHelp();
+                return 0;
+        }
+    }
+
+    std::ifstream inputFile(inputPath);
     if (!inputFile.is_open())
     {
         std::cerr << "Could not open \"" << inputPath << "\"." << std::endl;
@@ -582,15 +664,12 @@ int main(int argc, char* argv[])
     }
 
     size_t pathLastDot = inputPath.rfind('.');
-    if (pathLastDot == std::string::npos)
+    if (pathLastDot == inputPath.npos)
         pathLastDot = inputPath.length();
 
     std::string outputPath = inputPath.substr(0, pathLastDot) + ".bin";
-
-    Assembler assembler;
-    assembler.SetFlags(FLAG_VERBOSE);
-
     std::fstream outFile(outputPath, std::ios::binary | std::ios::out);
+
     if (!outFile.is_open())
     {
         std::cerr << "Could not create \"" << outputPath << "\"." << std::endl;

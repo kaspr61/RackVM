@@ -32,6 +32,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "vm_memory.h"
 
+/* Uncomment to enable trace printing for VM heap memory.*/
+/* #define TRACE_MEMORY */
+
 typedef struct Alloc {
     uint32_t safebytes;
     uint8_t occupied;
@@ -93,12 +96,14 @@ Addr_t HeapAlloc(uint32_t size)
 
     if (curr == NULL)
     {
-        puts("Heap memory corruption.");
+        puts("[RackVM] Heap memory corruption.");
         return 0;
     }
 
+#if !defined(NDEBUG) && defined(TRACE_MEMORY)
     printf("Found free block of size %llu, starting at %lu.\n", 
         GetAllocSize(curr), (Addr_t)((uint8_t *)curr - heap));
+#endif
 
     Alloc_t *next = (Alloc_t *)((uint8_t*)curr + sizeof(Alloc_t) + size);
 
@@ -189,8 +194,10 @@ void HeapFree(Addr_t address)
         printf("[RackVM] Warning: heap corrupted near 0x%0lX.\n", address);
     }
 
+#if !defined(NDEBUG) && defined(TRACE_MEMORY)
     printf("Deallocating %llu bytes at %lu.\n", 
         GetAllocSize(curr), (Addr_t)((uint8_t *)curr - heap));
+#endif
 
     
     /* If the prev is free, join them. */
@@ -214,8 +221,11 @@ Addr_t HeapAllocString(const char *content)
     Addr_t str = HeapAlloc(size);
 
     strcpy(heap + str, content);
+
+#if !defined(NDEBUG) && defined(TRACE_MEMORY)
     printf("Created new string \"%s\" at %lu.\n", 
         (const char *)(heap+str), str);
+#endif
 
     return str;
 }
@@ -231,8 +241,10 @@ Addr_t HeapAllocCombinedString(const char *content1, const char *content2)
     memcpy(heap + str + content1Size, content2, content2Size);
     *(char*)(heap + str + size) = '\0';
 
+#if !defined(NDEBUG) && defined(TRACE_MEMORY)
     printf("Created new string \"%s\" at %lu.\n", 
         (const char *)(heap+str), str);
+#endif
 
     return str;
 }
@@ -248,8 +260,10 @@ Addr_t HeapAllocSubStr(const char *content, uint32_t size)
     memcpy(heap + str, content, size);
     *(char*)(heap+str+size) = '\0';
 
+#if !defined(NDEBUG) && defined(TRACE_MEMORY)
     printf("Created new string \"%s\" at %lu.\n", 
         (const char *)(heap+str), str);
+#endif
 
     return str;
 }

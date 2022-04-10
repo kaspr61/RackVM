@@ -33,6 +33,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <sstream>
 #include <algorithm>
 #include <iomanip>
+#include <vector>
 
 #include "label.hpp"
 #include "encoder.hpp"
@@ -87,13 +88,15 @@ namespace Assembly
         // Returns 0 on assembly error.
         size_t Assemble(std::istream& textInput, std::iostream& binaryOutput);
 
-        // If no flags are set, the assembler will show all errors and warnings by default.
-        inline void SetFlags(AssemblerFlags flags) { m_flags = flags; }
+        inline void AddFlags(AssemblerFlags flags)   { m_flags |= flags; }
+        inline void ClearFlags(AssemblerFlags flags) { m_flags = 0x0; }
 
     private:
+        static std::string UnescapeString(const std::string& str);
         std::string ToLowerCase(const std::string& str) const;
         std::string RemoveWhitespace(const std::string& str) const;
         void PrintMemory(void* address, size_t byteCount) const;
+
         BinaryInstruction TranslateInstruction(const std::string& opcode, uint64_t* args);
         uint64_t EvaluateArgument(const std::string& arg);
         void ExecAssemblerDirective(const std::string& directive, const std::string* args);

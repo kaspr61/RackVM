@@ -33,6 +33,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "vm_memory.h"
 
+/* Disables the automatic dump of the stack to stdout on program exit. 
+ * This only takes effect when compiling in debug mode. */
+/* #define NO_STACK_DUMP */
+
 /* The number of 32-bit elements on the stack. 512 = 2 KiB stack. */
 #define STACK_SIZE 512
 
@@ -370,7 +374,7 @@ static void DumpStack()
 {
     /* Print the stack up until sp */
     puts(  "======== STACK DUMP ===================================================================");
-    printf("          %-3s %-10s %-20s %-12s %-12s   %-s \n", "[]", "i32", "i64", "f32", "f64", "hex");
+    printf("          %-3s %-10s %-20s %-12s %-12s    %-s \n", "[]", "i32", "i64", "f32", "f64", "hex");
     puts(  "---------------------------------------------------------------------------------------");
 
     int32_t *currSp = sp;
@@ -410,30 +414,31 @@ static void Cleanup()
 
 int main(int argc, const char **argv)
 {
-#ifdef UNION_DECODING
-    puts("[RackVM] Decoding instructions using the union technique.");
-#else
-    puts("[RackVM] Decoding instructions using the bitmasking technique.");
+#ifndef NDEBUG
+    #if UNION_DECODING
+        puts("[RackVM] Decoding instructions using the union technique.");
+    #else
+        puts("[RackVM] Decoding instructions using the bitmasking technique.");
+    #endif
 #endif
-
     /* First of all, do a runtime check for the size of Instr_t. 
      * If this does not match, instructions will be misinterpreted,
      * and the union "decoding" technique would be meaningless.*/
     if (sizeof(Instr_t) != 13)
     {
-        printf("Invalid size of instruction struct (%llu).\nAborting.\n", sizeof(Instr_t));
+        printf("[RackVM] Invalid size of instruction struct (%llu).\nAborting.\n", sizeof(Instr_t));
         return 0;
     }
 
     if (argc != 2)
     {
-        printf("Invalid arguments.\n");
+        printf("[RackVM] Invalid arguments.\n");
         return 0;
     }
 
     if (!ReadProgram(argv[1]))
     {
-        printf("Couldn't read file \"%s\".\n", argv[1]);
+        printf("[RackVM] Couldn't read file \"%s\".\n", argv[1]);
         return 0;
     }
 
@@ -446,15 +451,17 @@ int main(int argc, const char **argv)
         exitCode = 0;
 
     if (exitCode != VM_EXIT_SUCCESS)
-        printf("Exited with exit code %d", exitCode);
+        printf("[RackVM] Exited with exit code %d", exitCode);
 
     /* Check and report on potential stack corruption. */
     if (stackBegin[0] != 0xAC1D || stackBegin[1] != 0xFACE)
     {
-        puts("Warning: stack was corrupted during execution (underflow).\n");
+        puts("[RackVM] Warning: stack was corrupted during execution (underflow).\n");
     }
 
+#if !defined(NDEBUG) && !defined(NO_STACK_DUMP)
     DumpStack();
+#endif
 
     Cleanup();
     return 0;
