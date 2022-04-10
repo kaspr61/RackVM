@@ -8,6 +8,7 @@ target_sources(${TARGET_VM}
     PRIVATE
         vm.c
         vm_memory.c    vm_memory.h
+        opcodes.h
 )
 
 if(UNION_DECODING)
