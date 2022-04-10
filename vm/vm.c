@@ -55,10 +55,17 @@ typedef enum {
 typedef enum {
     NOP         = 0x00,
     EXIT        = 0x01,
+    JMP,
+    CALL,
+    RET,
+    RET_32,
+    RET_64,
+    SCALL,
+    SARG,
 
     /******** STACK-BASED INSTRUCTIONS ********/
     /* Load & Store */
-    S_LDI       = 0x02,
+    S_LDI       = 0x09,
     S_LDI_64,
     S_STM,
     S_STM_64,
@@ -77,7 +84,7 @@ typedef enum {
     S_STA,
     S_STA_64,
     /* Arithmetics */
-    S_ADD       = 0x14,
+    S_ADD       = 0x1B,
     S_ADD_64,
     S_ADD_F,
     S_ADD_F64,
@@ -94,7 +101,7 @@ typedef enum {
     S_DIV_F,
     S_DIV_F64,
     /* Bit Stuff */
-    S_INV       = 0x24,
+    S_INV       = 0x2B,
     S_INV_64,
     S_NEG,
     S_NEG_64,
@@ -106,10 +113,10 @@ typedef enum {
     S_BXOR_64,
     S_BAND,
     S_BAND_64,
-    S_OR,
-    S_AND,
     /* Conditions & Branches */
-    S_CPZ       = 0x32,
+    S_OR        = 0x37,
+    S_AND,
+    S_CPZ,
     S_CPZ_64,
     S_CPEQ,
     S_CPEQ_64,
@@ -139,12 +146,11 @@ typedef enum {
     S_CPCHR,
     S_BRZ,
     S_BRNZ,
-    S_JMP,
     S_BRIZ,
     S_BRINZ,
     S_JMPI,
     /* Conversions */
-    S_ITOL      = 0x54,
+    S_ITOL      = 0x5A,
     S_ITOF,
     S_ITOD,
     S_ITOS,
@@ -165,22 +171,16 @@ typedef enum {
     S_STOF,
     S_STOD,
     /* Miscellaneous */
-    S_NEW       = 0x68,
+    S_NEW       = 0x6E,
     S_DEL,
     S_RESZ,
     S_SIZE,
-    S_CALL,
-    S_RET,
-    S_RET_32,
-    S_RET_64,
-    S_SCALL,
-    S_SARG,
     S_STR,
     S_STRCPY,
     S_STRCAT,
     S_STRCMB,
 
-    OPCODE_COUNT
+    S_OPCODE_COUNT
 } Opcode_t;
 
 typedef enum {

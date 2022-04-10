@@ -55,6 +55,75 @@ int StackInterpreterLoop()
             case EXIT:
                 return VM_EXIT_SUCCESS;
 
+            case JMP: instrPtr = program + DECODE_ADDR();
+                break;
+
+            case CALL: tmp1 = (char *)stackFrame;
+                stackFrame = ++sp;                                        /* Set new stack frame */
+                stackFrameLocals = stackFrame + 1;
+                *(int32_t*)(sp) = (int32_t)((int32_t*)tmp1 - stackBegin); /* Put offset to previous stack frame. */
+                *(Addr_t*)++sp = (Addr_t)((instrPtr + 5) - program);      /* Put return address. */
+                instrPtr = program + DECODE_ADDR();
+                break;
+
+            case RET: 
+                instrPtr = program + *(stackFrame + 1); /* Jump to return address. */
+                /* Set SP to current stack frame - size of args. */
+                sp = (int32_t*)((uint8_t*)stackFrame - DECODE_8(u8, C, 0)) - 1; 
+                stackFrame = stackBegin + *stackFrame; /* Reset to previous stack frame. */
+                stackFrameLocals = stackFrame + 1;
+                break;
+
+            case RET_32: tmp1 = (char *)sp; /* Save ptr to last value on stack. */
+                instrPtr = program + *(stackFrame + 1);
+                sp = (int32_t*)((uint8_t*)stackFrame - DECODE_8(u8, C, 0)) - 1; 
+                stackFrame = stackBegin + *stackFrame;
+                stackFrameLocals = stackFrame + 1;
+
+                *(int32_t*)(++sp) = *(int32_t*)tmp1;
+                break;
+
+            case RET_64: tmp1 = (char *)(sp-1); /* Save ptr to last value on stack. */
+                instrPtr = program + *(stackFrame + 1);
+                sp = (int32_t*)((uint8_t*)stackFrame - DECODE_8(u8, C, 0)) - 1; 
+                stackFrame = stackBegin + *stackFrame;
+                stackFrameLocals = stackFrame + 1;
+
+                ++sp;
+                *(int64_t*)sp++ = *(int64_t*)tmp1;
+                break;
+
+            case SCALL: 
+            {   
+                /* Number of arguments system function call. */
+                tmpInt = sysArgPtr - sysArgs; 
+                switch ((SysFunc_t)DECODE_8(u8, C, 0))
+                {
+                    case SYSFUNC_PRINT: SysPrint(tmpInt);
+                        break;
+                    
+                    case SYSFUNC_INPUT: *++sp = HeapAllocString(fgets(strBuf, 128, stdin));
+                        break;
+
+                    case SYSFUNC_STR: SysStr(tmpInt);
+                        break;
+                }
+
+                sysArgPtr = sysArgs;     /* Reset the pointer. */
+                *(uint64_t*)sysArgs = 0; /* Reset all 8 bytes to 0 at once. */
+                instrPtr += 2;
+                break;
+            }
+
+            /* To indicate a pointer type (e.g. string or array), set bit 7 (MSB) to 1 (0x80). */
+            /* To indicate a double type, set bit 6 to 1 (0x40). */
+            /* To indicate a float type, set bit 5 to 1 (0x20). */
+            /* To indicate a long type, set bit 4 to 1 (0x10). */
+            /* The default value is an int (32-bits). */
+            case SARG: *sysArgPtr++ = DECODE_8(u8, C, 0);
+                instrPtr += 2;
+                break;
+
             /**** Load & Store ****/
 
             case S_LDI: *(int32_t*)++sp = DECODE_32(i32, C, 0);
@@ -261,14 +330,6 @@ int StackInterpreterLoop()
                 instrPtr += 1;
                 break;
 
-            case S_OR: STACK_OP_32(int32_t *, ||);
-                instrPtr += 1;
-                break;
-
-            case S_AND: STACK_OP_32(int32_t *, &&);
-                instrPtr += 1;
-                break;
-
             /**** Comparisons ****/
 
 /* Consumes 2 32-bit values and pushes a bool value (int32_t). */
@@ -276,6 +337,14 @@ int StackInterpreterLoop()
 
 /* Consumes 2 64-bit values and pushes a bool value (int32_t). */
 #define STACK_OP_64_BOOL(type, op) sp -= 3; *(int32_t*)sp = *(type)sp MACRO_LITERAL(op) *(type)(sp+2)
+
+            case S_OR: STACK_OP_32(int32_t *, ||);
+                instrPtr += 1;
+                break;
+
+            case S_AND: STACK_OP_32(int32_t *, &&);
+                instrPtr += 1;
+                break;
 
             case S_CPZ: *(int32_t*)sp = !(*(int32_t*)sp);
                 instrPtr += 1;
@@ -395,8 +464,6 @@ int StackInterpreterLoop()
             case S_BRNZ: instrPtr = *sp-- ? program + DECODE_ADDR() : instrPtr + 5;
                 break;
 
-            case S_JMP: instrPtr = program + DECODE_ADDR();
-                break;
 
             case S_BRIZ: sp -= 2; instrPtr = !*(sp+1) ? program + *(uint32_t*)(sp+2) : instrPtr + 1;
                 break;
@@ -515,72 +582,6 @@ int StackInterpreterLoop()
 
             case S_SIZE: *sp = GetHeapAllocSize(*sp);
                 instrPtr += 1;
-                break;
-
-            case S_CALL: tmp1 = (char *)stackFrame;
-                stackFrame = ++sp;                                        /* Set new stack frame */
-                stackFrameLocals = stackFrame + 1;
-                *(int32_t*)(sp) = (int32_t)((int32_t*)tmp1 - stackBegin); /* Put offset to previous stack frame. */
-                *(Addr_t*)++sp = (Addr_t)((instrPtr + 5) - program);      /* Put return address. */
-                instrPtr = program + DECODE_ADDR();
-                break;
-
-            case S_RET: 
-                instrPtr = program + *(stackFrame + 1); /* Jump to return address. */
-                /* Set SP to current stack frame - size of args. */
-                sp = (int32_t*)((uint8_t*)stackFrame - DECODE_8(u8, C, 0)) - 1; 
-                stackFrame = stackBegin + *stackFrame; /* Reset to previous stack frame. */
-                stackFrameLocals = stackFrame + 1;
-                break;
-
-            case S_RET_32: tmp1 = (char *)sp; /* Save ptr to last value on stack. */
-                instrPtr = program + *(stackFrame + 1);
-                sp = (int32_t*)((uint8_t*)stackFrame - DECODE_8(u8, C, 0)) - 1; 
-                stackFrame = stackBegin + *stackFrame;
-                stackFrameLocals = stackFrame + 1;
-
-                *(int32_t*)(++sp) = *(int32_t*)tmp1;
-                break;
-
-            case S_RET_64: tmp1 = (char *)(sp-1); /* Save ptr to last value on stack. */
-                instrPtr = program + *(stackFrame + 1);
-                sp = (int32_t*)((uint8_t*)stackFrame - DECODE_8(u8, C, 0)) - 1; 
-                stackFrame = stackBegin + *stackFrame;
-                stackFrameLocals = stackFrame + 1;
-
-                ++sp;
-                *(int64_t*)sp++ = *(int64_t*)tmp1;
-                break;
-
-            case S_SCALL: 
-            {   
-                /* Number of arguments system function call. */
-                tmpInt = sysArgPtr - sysArgs; 
-                switch ((SysFunc_t)DECODE_8(u8, C, 0))
-                {
-                    case SYSFUNC_PRINT: SysPrint(tmpInt);
-                        break;
-                    
-                    case SYSFUNC_INPUT: *++sp = HeapAllocString(fgets(strBuf, 128, stdin));
-                        break;
-
-                    case SYSFUNC_STR: SysStr(tmpInt);
-                        break;
-                }
-
-                sysArgPtr = sysArgs;     /* Reset the pointer. */
-                *(uint64_t*)sysArgs = 0; /* Reset all 8 bytes to 0 at once. */
-                instrPtr += 2;
-                break;
-            }
-
-            /* To indicate a pointer type (e.g. string or array), set bit 7 (MSB) to 1 (0x80). */
-            /* To indicate a double type, set bit 6 to 1 (0x40). */
-            /* To indicate a float type, set bit 5 to 1 (0x20). */
-            /* To indicate a long type, set bit 4 to 1 (0x10). */
-            /* The default value is an int (32-bits). */
-            case S_SARG: *sysArgPtr++ = DECODE_8(u8, C, 0);
-                instrPtr += 2;
                 break;
 
             case S_STR: *++sp = HeapAllocString((const char *)(program + DECODE_ADDR()));
