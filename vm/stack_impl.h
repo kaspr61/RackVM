@@ -624,8 +624,7 @@ void SysPrint(int32_t argCnt)
         char    *addr;
         int32_t i32;
         int64_t i64;
-        float   f32;
-        double  f64;
+        double  f64; /* No need for floats since only doubles are really used in printf, etc. */
     } argVal[8] = {0};
 
     size_t valueSizeSum = 0;
@@ -635,31 +634,29 @@ void SysPrint(int32_t argCnt)
         sysArgFlags = sysArgs[i];
         if (sysArgFlags & 0x80)
         {
-            argVal[i].addr = (char *)(heap + *(sp - valueSizeSum++));
-            continue;
+            argVal[i].addr = (char *)(heap + *(sp - valueSizeSum));
+            ++valueSizeSum;
         }
-
-        if (sysArgFlags & 0x40)
+        else if (sysArgFlags & 0x40)
         {
-            argVal[i].f64 = *(double*)(sp - valueSizeSum);
+            argVal[i].f64 = *(double*)(sp - valueSizeSum - 1);
             valueSizeSum += 2;
-            continue;
         }
-
-        if (sysArgFlags & 0x20)
+        else if (sysArgFlags & 0x20)
         {
-            argVal[i].f32 = *(float*)(sp - valueSizeSum++);
-            continue;
+            argVal[i].f64 = *(float*)(sp - valueSizeSum);
+            ++valueSizeSum;
         }
-
-        if (sysArgFlags & 0x10)
+        else if (sysArgFlags & 0x10)
         {
-            argVal[i].i64 = *(int64_t*)(sp - valueSizeSum);
+            argVal[i].i64 = *(int64_t*)(sp - valueSizeSum - 1);
             valueSizeSum += 2;
-            continue;
         }
-
-        argVal[i].i32 = *(int32_t*)(sp - valueSizeSum++);
+        else
+        {
+            argVal[i].i32 = *(int32_t*)(sp - valueSizeSum);
+            ++valueSizeSum;
+        }
     }
 
     switch (argCnt)

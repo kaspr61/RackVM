@@ -134,8 +134,24 @@ namespace Assembly {
         uint64_t result = 0;
 
         // Check is numeric unary expression.
-        if (arg.find_first_not_of("-0123456789") == std::string::npos) // Only contains digits and/or '-'.
+        if (arg.find_first_not_of(".f-0123456789") == std::string::npos) // Only contains digits and/or '-'.
         {
+            pos = arg.find('.');
+            if (pos != std::string::npos)
+            {
+                pos = arg.find('f');
+                if (pos != std::string::npos)
+                {
+                    float tmp = std::stof(arg.c_str());
+                    return *(uint64_t*)(&tmp);
+                }
+                else
+                {
+                    double tmp = std::stod(arg.c_str());
+                    return *(uint64_t*)(&tmp);
+                }
+            }
+
             pos = arg.rfind('-');
             if (pos == std::string::npos || pos == 0) // Is positive or negative integer
             {
