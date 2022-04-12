@@ -248,7 +248,7 @@ namespace Assembly {
                 return;
             }
 
-            m_binHeader.mode = args[0] == "register" ? VM_MODE_REGISTER : VM_MODE_STACK;
+            m_binHeader.mode = lowerArg0 == "register" ? VM_MODE_REGISTER : VM_MODE_STACK;
             m_encoder.LoadInstructionSet(static_cast<VMMode>(m_binHeader.mode));
         }
         else if (directive == ".HEAP") // Sets header info field 'HEAP'.

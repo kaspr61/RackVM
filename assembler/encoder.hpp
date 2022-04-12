@@ -85,7 +85,7 @@ namespace Assembly
 
         // For instructions with arguments: Ra, Rb, Rc
         // Final binary size: 4 bytes.
-        BinaryInstruction(uint8_t opcode, Register regA, Register regB, Register regC)
+        explicit BinaryInstruction(uint8_t opcode, Register regA, Register regB, Register regC)
             : BinaryInstruction()
         {
             this->opcode = opcode;
@@ -168,6 +168,46 @@ namespace Assembly
             instr[0] = (reinterpret.iVal & 0x0000'0000'FFFF'FFFF);       // Write 4/8 bytes of C.
             instr[1] = (reinterpret.iVal & 0xFFFF'FFFF'0000'0000) >> 32; // Write the remaining 4 bytes of C.
         }
+
+        // For instructions with arguments: Ra, Rb, (uint32_t) C
+        // Final binary size: 7 bytes.
+        BinaryInstruction(uint8_t opcode, Register regA, Register regB, uint32_t C)
+            : BinaryInstruction()
+        {
+            this->opcode = opcode;
+            instr[0] = regA;
+            instr[0] |= (regB << 8)  & 0x0000'FF00;
+            instr[0] |= (C << 16)  & 0xFFFF'0000;
+            instr[1] = (C >> 16) & 0x0000'FFFF;
+        }
+
+        // For instructions with arguments: Ra, Rb, (uint64_t) C
+        // Final binary size: 11 bytes.
+        BinaryInstruction(uint8_t opcode, Register regA, Register regB, uint64_t C)
+            : BinaryInstruction()
+        {
+            this->opcode = opcode;
+            instr[0] = regA;
+            instr[0] |= (regB << 8)  & 0x0000'FF00;
+            instr[0] |= (C << 16) & 0xFFFF'0000; // Write 2/8 bytes of C.
+            instr[1] = (C >> 16);                // Write 4/6 remaining bytes of C.
+            instr[2] = (C >> 48) & 0x0000'FFFF;  // Write 2 remaining bytes of C.
+        }
+
+        // For instructions with arguments: Ra, Rb, (float) C
+        // Final binary size: 7 bytes.
+        explicit BinaryInstruction(uint8_t opcode, Register regA, Register regB, float C)
+            : BinaryInstruction(opcode, regA, regB, *(uint32_t*)(&C))
+        {
+        }
+
+        // For instructions with arguments: Ra, Rb, (double) C
+        // Final binary size: 11 bytes.
+        explicit BinaryInstruction(uint8_t opcode, Register regA, Register regB, double C)
+            : BinaryInstruction(opcode, regA, regB, *(uint64_t*)(&C))
+        {
+        }
+
     };
 
     struct InstructionData

@@ -25,8 +25,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-void SysPrint(int argCnt);
-void SysStr(int argCnt);
+#include "shared_impl.h"
 
 /* Implements an interpreter loop with switch dispatch for the 
  * stack architecture. Through the use of a union, operands may be 
@@ -36,6 +35,7 @@ int StackInterpreterLoop()
     char *tmp1;
     char *tmp2;
     int32_t tmpInt;
+    Reinterpret_t reinterpret;
 
     /* In order to maintain consistency between LDL/STL and LDA/STA, locals must 
      * be accessed through this, since it is 4 bytes higher than 'stackFrame'.
@@ -49,80 +49,23 @@ int StackInterpreterLoop()
 
         switch (DECODE_OPCODE())
         {
-            case NOP: instrPtr += 1;
-                break;
+            case NOP: SHARED_NOP(); break;
 
-            case EXIT:
-                return VM_EXIT_SUCCESS;
+            case EXIT: SHARED_EXIT();
 
-            case JMP: instrPtr = program + DECODE_ADDR();
-                break;
+            case JMP: SHARED_JMP(); break;
 
-            case CALL: tmp1 = (char *)stackFrame;
-                stackFrame = ++sp;                                        /* Set new stack frame */
-                stackFrameLocals = stackFrame + 1;
-                *(int32_t*)(sp) = (int32_t)((int32_t*)tmp1 - stackBegin); /* Put offset to previous stack frame. */
-                *(Addr_t*)++sp = (Addr_t)((instrPtr + 5) - program);      /* Put return address. */
-                instrPtr = program + DECODE_ADDR();
-                break;
+            case CALL: SHARED_CALL(); break;
 
-            case RET: 
-                instrPtr = program + *(stackFrame + 1); /* Jump to return address. */
-                /* Set SP to current stack frame - size of args. */
-                sp = (int32_t*)((uint8_t*)stackFrame - DECODE_8(u8, C, 0)) - 1; 
-                stackFrame = stackBegin + *stackFrame; /* Reset to previous stack frame. */
-                stackFrameLocals = stackFrame + 1;
-                break;
+            case RET: SHARED_RET(); break;
 
-            case RET_32: tmp1 = (char *)sp; /* Save ptr to last value on stack. */
-                instrPtr = program + *(stackFrame + 1);
-                sp = (int32_t*)((uint8_t*)stackFrame - DECODE_8(u8, C, 0)) - 1; 
-                stackFrame = stackBegin + *stackFrame;
-                stackFrameLocals = stackFrame + 1;
+            case RET_32: SHARED_RET_32(); break;
 
-                *(int32_t*)(++sp) = *(int32_t*)tmp1;
-                break;
+            case RET_64: SHARED_RET_64(); break;
 
-            case RET_64: tmp1 = (char *)(sp-1); /* Save ptr to last value on stack. */
-                instrPtr = program + *(stackFrame + 1);
-                sp = (int32_t*)((uint8_t*)stackFrame - DECODE_8(u8, C, 0)) - 1; 
-                stackFrame = stackBegin + *stackFrame;
-                stackFrameLocals = stackFrame + 1;
+            case SCALL: SHARED_SCALL(); break;
 
-                ++sp;
-                *(int64_t*)sp++ = *(int64_t*)tmp1;
-                break;
-
-            case SCALL: 
-            {   
-                /* Number of arguments system function call. */
-                tmpInt = sysArgPtr - sysArgs; 
-                switch ((SysFunc_t)DECODE_8(u8, C, 0))
-                {
-                    case SYSFUNC_PRINT: SysPrint(tmpInt);
-                        break;
-                    
-                    case SYSFUNC_INPUT: *++sp = HeapAllocString(fgets(strBuf, 128, stdin));
-                        break;
-
-                    case SYSFUNC_STR: SysStr(tmpInt);
-                        break;
-                }
-
-                sysArgPtr = sysArgs;     /* Reset the pointer. */
-                *(uint64_t*)sysArgs = 0; /* Reset all 8 bytes to 0 at once. */
-                instrPtr += 2;
-                break;
-            }
-
-            /* To indicate a pointer type (e.g. string or array), set bit 7 (MSB) to 1 (0x80). */
-            /* To indicate a double type, set bit 6 to 1 (0x40). */
-            /* To indicate a float type, set bit 5 to 1 (0x20). */
-            /* To indicate a long type, set bit 4 to 1 (0x10). */
-            /* The default value is an int (32-bits). */
-            case SARG: *sysArgPtr++ = DECODE_8(u8, C, 0);
-                instrPtr += 2;
-                break;
+            case SARG: SHARED_SARG(); break;
 
             /**** Load & Store ****/
 
@@ -556,13 +499,15 @@ int StackInterpreterLoop()
                 instrPtr += 9;
                 break;
 
-            case S_STOF: tmp1 = heap + *sp; *(float*)sp = strtof(tmp1, &tmp2);
-                *(float*)sp = tmp2 == tmp1 ? DECODE_F32(f32, C, 0) : *(float*)sp;
+            case S_STOF: reinterpret.intVal = DECODE_32(i32, C, 0);
+                tmp1 = heap + *sp; *(float*)sp = strtof(tmp1, &tmp2);
+                *(float*)sp = tmp2 == tmp1 ? reinterpret.fltVal : *(float*)sp;
                 instrPtr += 5;
                 break;
 
-            case S_STOD: tmp1 = heap + *sp; *(double*)sp = strtod(tmp1, &tmp2);
-                *(double*)sp++ = tmp2 == tmp1 ? DECODE_F64(f64, C, 0) : *(double*)sp;
+            case S_STOD: reinterpret.longVal = DECODE_64(i64, C, 0);
+                tmp1 = heap + *sp; *(double*)sp = strtod(tmp1, &tmp2);
+                *(double*)sp++ = tmp2 == tmp1 ? reinterpret.dblVal : *(double*)sp;
                 instrPtr += 9;
                 break;
 
@@ -610,180 +555,3 @@ int StackInterpreterLoop()
 
     return VM_EXIT_SUCCESS;
 }
-
-/*
- * Below is some ugly code. Hardcoding function calls that should really be
- * variadic really does get ugly, especially with support for differing types. 
-*/
-
-#define PRINT_VAL_SIZE(argIdx) ((sysArgs[argIdx] & 0x0F) / 4)
-#define PRINT_ARG(argIdx) (argVal[argIdx].addr)
-
-void SysPrint(int32_t argCnt)
-{
-    union {
-        char    *addr;
-        int32_t i32;
-        int64_t i64;
-        double  f64; /* No need for floats since only doubles are really used in printf, etc. */
-    } argVal[8] = {0};
-
-    size_t valueSizeSum = 0;
-    uint8_t sysArgFlags;
-    for (int i = argCnt - 1; i >= 0; --i)
-    {
-        sysArgFlags = sysArgs[i];
-        if (sysArgFlags & 0x80)
-        {
-            argVal[i].addr = (char *)(heap + *(sp - valueSizeSum));
-            ++valueSizeSum;
-        }
-        else if (sysArgFlags & 0x40)
-        {
-            argVal[i].f64 = *(double*)(sp - valueSizeSum - 1);
-            valueSizeSum += 2;
-        }
-        else if (sysArgFlags & 0x20)
-        {
-            argVal[i].f64 = *(float*)(sp - valueSizeSum);
-            ++valueSizeSum;
-        }
-        else if (sysArgFlags & 0x10)
-        {
-            argVal[i].i64 = *(int64_t*)(sp - valueSizeSum - 1);
-            valueSizeSum += 2;
-        }
-        else
-        {
-            argVal[i].i32 = *(int32_t*)(sp - valueSizeSum);
-            ++valueSizeSum;
-        }
-    }
-
-    switch (argCnt)
-    {
-        case 0:
-        case 1: printf(heap + *sp--); 
-            break;
-        case 2: printf(PRINT_ARG(0), PRINT_ARG(1)); 
-            sp -= PRINT_VAL_SIZE(0) + PRINT_VAL_SIZE(1);
-            break;
-        case 3: printf(PRINT_ARG(0), PRINT_ARG(1), PRINT_ARG(2)); 
-            sp -= PRINT_VAL_SIZE(0) + PRINT_VAL_SIZE(1) + PRINT_VAL_SIZE(2);
-            break;
-        case 4: printf(PRINT_ARG(0), PRINT_ARG(1), PRINT_ARG(2), PRINT_ARG(3)); 
-            sp -= PRINT_VAL_SIZE(0) + PRINT_VAL_SIZE(1) + PRINT_VAL_SIZE(2) + 
-                  PRINT_VAL_SIZE(3);
-            break;
-        case 5: printf(PRINT_ARG(0), PRINT_ARG(1), PRINT_ARG(2), PRINT_ARG(3),
-                       PRINT_ARG(4)); 
-            sp -= PRINT_VAL_SIZE(0) + PRINT_VAL_SIZE(1) + PRINT_VAL_SIZE(2) + 
-                  PRINT_VAL_SIZE(3) + PRINT_VAL_SIZE(4);
-            break;
-        case 6: printf(PRINT_ARG(0), PRINT_ARG(1), PRINT_ARG(2), PRINT_ARG(3),
-                       PRINT_ARG(4), PRINT_ARG(5)); 
-            sp -= PRINT_VAL_SIZE(0) + PRINT_VAL_SIZE(1) + PRINT_VAL_SIZE(2) + 
-                  PRINT_VAL_SIZE(3) + PRINT_VAL_SIZE(4) + PRINT_VAL_SIZE(5);
-            break;
-        case 7: printf(PRINT_ARG(0), PRINT_ARG(1), PRINT_ARG(2), PRINT_ARG(3),
-                       PRINT_ARG(4), PRINT_ARG(5), PRINT_ARG(6)); 
-            sp -= PRINT_VAL_SIZE(0) + PRINT_VAL_SIZE(1) + PRINT_VAL_SIZE(2) + 
-                  PRINT_VAL_SIZE(3) + PRINT_VAL_SIZE(4) + PRINT_VAL_SIZE(5) +
-                  PRINT_VAL_SIZE(6);
-            break;
-        case 8: printf(PRINT_ARG(0), PRINT_ARG(1), PRINT_ARG(2), PRINT_ARG(3),
-                       PRINT_ARG(4), PRINT_ARG(5), PRINT_ARG(6), PRINT_ARG(7)); 
-            sp -= PRINT_VAL_SIZE(0) + PRINT_VAL_SIZE(1) + PRINT_VAL_SIZE(2) + 
-                  PRINT_VAL_SIZE(3) + PRINT_VAL_SIZE(4) + PRINT_VAL_SIZE(5) +
-                  PRINT_VAL_SIZE(6) + PRINT_VAL_SIZE(7);
-            break;
-    }
-}
-
-void SysStr(int32_t argCnt)
-{
-    union {
-        char    *addr;
-        int32_t i32;
-        int64_t i64;
-        float   f32;
-        double  f64;
-    } argVal[8] = {0};
-
-    size_t valueSizeSum = 0;
-    uint8_t sysArgFlags;
-    for (int i = argCnt - 1; i >= 0; --i)
-    {
-        sysArgFlags = sysArgs[i];
-        if (sysArgFlags & 0x80)
-        {
-            argVal[i].addr = (char *)(heap + *(sp - valueSizeSum++));
-            continue;
-        }
-
-        if (sysArgFlags & 0x40)
-        {
-            argVal[i].f64 = *(double*)(sp - valueSizeSum);
-            valueSizeSum += 2;
-            continue;
-        }
-
-        if (sysArgFlags & 0x20)
-        {
-            argVal[i].f32 = *(float*)(sp - valueSizeSum++);
-            continue;
-        }
-
-        if (sysArgFlags & 0x10)
-        {
-            argVal[i].i64 = *(int64_t*)(sp - valueSizeSum);
-            valueSizeSum += 2;
-            continue;
-        }
-
-        argVal[i].i32 = *(int32_t*)(sp - valueSizeSum++);
-    }
-
-    switch (argCnt)
-    {
-        case 0:
-        case 1: snprintf(strBuf, 128, heap + *sp--); 
-            break;
-        case 2: snprintf(strBuf, 128, PRINT_ARG(0), PRINT_ARG(1)); 
-            sp -= PRINT_VAL_SIZE(0) + PRINT_VAL_SIZE(1);
-            break;
-        case 3: snprintf(strBuf, 128, PRINT_ARG(0), PRINT_ARG(1), PRINT_ARG(2)); 
-            sp -= PRINT_VAL_SIZE(0) + PRINT_VAL_SIZE(1) + PRINT_VAL_SIZE(2);
-            break;
-        case 4: snprintf(strBuf, 128, PRINT_ARG(0), PRINT_ARG(1), PRINT_ARG(2), PRINT_ARG(3)); 
-            sp -= PRINT_VAL_SIZE(0) + PRINT_VAL_SIZE(1) + PRINT_VAL_SIZE(2) + 
-                  PRINT_VAL_SIZE(3);
-            break;
-        case 5: snprintf(strBuf, 128, PRINT_ARG(0), PRINT_ARG(1), PRINT_ARG(2), PRINT_ARG(3),
-                       PRINT_ARG(4)); 
-            sp -= PRINT_VAL_SIZE(0) + PRINT_VAL_SIZE(1) + PRINT_VAL_SIZE(2) + 
-                  PRINT_VAL_SIZE(3) + PRINT_VAL_SIZE(4);
-            break;
-        case 6: snprintf(strBuf, 128, PRINT_ARG(0), PRINT_ARG(1), PRINT_ARG(2), PRINT_ARG(3),
-                       PRINT_ARG(4), PRINT_ARG(5)); 
-            sp -= PRINT_VAL_SIZE(0) + PRINT_VAL_SIZE(1) + PRINT_VAL_SIZE(2) + 
-                  PRINT_VAL_SIZE(3) + PRINT_VAL_SIZE(4) + PRINT_VAL_SIZE(5);
-            break;
-        case 7: snprintf(strBuf, 128, PRINT_ARG(0), PRINT_ARG(1), PRINT_ARG(2), PRINT_ARG(3),
-                       PRINT_ARG(4), PRINT_ARG(5), PRINT_ARG(6)); 
-            sp -= PRINT_VAL_SIZE(0) + PRINT_VAL_SIZE(1) + PRINT_VAL_SIZE(2) + 
-                  PRINT_VAL_SIZE(3) + PRINT_VAL_SIZE(4) + PRINT_VAL_SIZE(5) +
-                  PRINT_VAL_SIZE(6);
-            break;
-        case 8: snprintf(strBuf, 128, PRINT_ARG(0), PRINT_ARG(1), PRINT_ARG(2), PRINT_ARG(3),
-                       PRINT_ARG(4), PRINT_ARG(5), PRINT_ARG(6), PRINT_ARG(7)); 
-            sp -= PRINT_VAL_SIZE(0) + PRINT_VAL_SIZE(1) + PRINT_VAL_SIZE(2) + 
-                  PRINT_VAL_SIZE(3) + PRINT_VAL_SIZE(4) + PRINT_VAL_SIZE(5) +
-                  PRINT_VAL_SIZE(6) + PRINT_VAL_SIZE(7);
-            break;
-    }
-
-    *++sp = HeapAllocString(strBuf);
-}
-
-#undef PRINT_VAL_SIZE

@@ -36,8 +36,8 @@ typedef enum {
     R_STA_64,
     R_MOVS,
     R_MOVS_64,
-    R_LDS,
-    R_LDS_64,
+    R_POP,
+    R_POP_64,
     R_PUSH,
     R_PUSH_64,
 

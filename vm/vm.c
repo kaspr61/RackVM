@@ -104,6 +104,85 @@ typedef union {
         uint8_t opcode;
         double C;
     } f64;
+
+    struct GCC_PACK {
+        uint8_t opcode;
+        uint8_t a;
+        uint8_t b;
+    } u8_u8;
+
+    struct GCC_PACK {
+        uint8_t opcode;
+        uint8_t a;
+        uint32_t C;
+    } u8_u32;
+
+    struct GCC_PACK {
+        uint8_t opcode;
+        uint8_t a;
+        int32_t C;
+    } u8_i32;
+
+    struct GCC_PACK {
+        uint8_t opcode;
+        uint8_t a;
+        int64_t C;
+    } u8_i64;
+
+    struct GCC_PACK {
+        uint8_t opcode;
+        uint8_t a;
+        float   C;
+    } u8_f32;
+
+    struct GCC_PACK {
+        uint8_t opcode;
+        uint8_t a;
+        double  C;
+    } u8_f64;
+
+    struct GCC_PACK {
+        uint8_t opcode;
+        uint8_t a;
+        uint8_t b;
+        uint32_t C;
+    } u8_u8_u32;
+
+    struct GCC_PACK {
+        uint8_t opcode;
+        uint8_t a;
+        uint8_t b;
+        int32_t C;
+    } u8_u8_i32;
+
+    struct GCC_PACK {
+        uint8_t opcode;
+        uint8_t a;
+        uint8_t b;
+        int64_t C;
+    } u8_u8_i64;
+
+    struct GCC_PACK {
+        uint8_t opcode;
+        uint8_t a;
+        uint8_t b;
+        float   C;
+    } u8_u8_f32;
+
+    struct GCC_PACK {
+        uint8_t opcode;
+        uint8_t a;
+        uint8_t b;
+        double  C;
+    } u8_u8_f64;
+
+    struct GCC_PACK {
+        uint8_t opcode;
+        uint8_t a;
+        uint8_t b;
+        uint8_t c;
+    } u8_u8_u8;
+
 #endif
     struct GCC_PACK {
         uint8_t  opcode;
@@ -120,18 +199,16 @@ typedef union {
     #define DECODE_ADDR() instr.u32.C
     #define DECODE_8( layout, field, offset) instr.layout.field
     #define DECODE_32(layout, field, offset) instr.layout.field
+    #define DECODE_u32(layout, field, offset) instr.layout.field
     #define DECODE_64(layout, field, offset) instr.layout.field
-    #define DECODE_F32(layout, field, offset) instr.layout.field
-    #define DECODE_F64(layout, field, offset) instr.layout.field
     #define DECODE_OPCODE() instr.opcode
 #else
     #define DECODE(layout, type, field, offset, mask) ((*(type *)(instr.raw + 1 + offset) & mask) >> (offset * 8))
-    #define DECODE_ADDR() ((uint32_t)(DECODE(layout, uint32_t, field, offset, 0xFFFFFFFF)))
+    #define DECODE_ADDR() ((uint32_t)(DECODE(layout, uint32_t, field, 0, 0xFFFFFFFF)))
     #define DECODE_8( layout, field, offset) ((uint8_t)(DECODE(layout, uint8_t, field, offset, 0xFF)))
     #define DECODE_32(layout, field, offset) ((int32_t)(DECODE(layout, int32_t, field, offset, 0xFFFFFFFF)))
-    #define DECODE_64(layout, field, offset) ((int32_t)(DECODE(layout, int32_t, field, offset, 0xFFFFFFFFFFFFFFFF)))
-    #define DECODE_F32(layout, field, offset) ((float)((*(uint32_t *)(instr.raw + 1 + offset) & 0xFFFFFFFF) >> (offset * 8)))
-    #define DECODE_F64(layout, field, offset) ((double)((*(uint64_t *)(instr.raw + 1 + offset) & 0xFFFFFFFFFFFFFFFF) >> (offset * 8)))
+    #define DECODE_u32(layout, field, offset) ((uint32_t)(DECODE(layout, uint32_t, field, offset, 0xFFFFFFFF)))
+    #define DECODE_64(layout, field, offset) ((int64_t)(DECODE(layout, int64_t, field, offset, 0xFFFFFFFFFFFFFFFF)))
     #define DECODE_OPCODE() (*(uint8_t *)(&instr) & 0xFF)
 #endif
 
@@ -140,6 +217,7 @@ typedef union {
 static int32_t  *sp;         /* Stack pointer (top-of-stack). */
 static int32_t  *stackBegin; /* Pointer to the beginning of the stack. */
 static int32_t  *stackEnd;   /* Pointer to the beginning of the stack. */
+static int32_t  *reg;        /* Pointer to the beginning of the registers. */
 static int32_t  *stackFrame; /* Pointer to the current function's stack frame. */
 static Instr_t  instr;       /* Instruction "register". */
 static uint8_t  *instrPtr;   /* Pointer to the next instruction. */
@@ -157,6 +235,14 @@ static char     strBuf[128];
 #define i64sp ((int64_t*)sp)
 #define f32sp ((float*)sp)
 #define f64sp ((double*)sp)
+
+/* A helper union for reinterpreting integer values as float values. */
+typedef union {
+    int32_t intVal;
+    int64_t longVal;
+    float   fltVal;
+    double  dblVal;
+} Reinterpret_t;
 
 #include "opcodes.h"
 
@@ -234,11 +320,18 @@ static void AllocateStack()
 {
     stackBegin = malloc(STACK_SIZE * sizeof(int32_t));
     stackEnd = stackBegin + STACK_SIZE;
+    reg = stackBegin;
     sp = stackBegin;
     stackFrame = stackBegin; /* For function call stack. */
 
+    /* In register mode, use the first 32 locations on the stack as
+     * virtual registers. The last one (R31) is also known as CPR. */
+    if (vmMode == VM_MODE_REGISTER)
+        sp += 32;
+
     *sp++ = 0xAC1D;
     *sp = 0xFACE;
+
 }
 
 static void DumpStack()
@@ -319,16 +412,22 @@ int main(int argc, const char **argv)
     if (vmMode == VM_MODE_STACK)
         exitCode = StackInterpreterLoop();
     else
-        exitCode = 0;
-
-    if (exitCode != VM_EXIT_SUCCESS)
-        printf("[RackVM] Exited with exit code %d", exitCode);
+        exitCode = RegisterInterpreterLoop();
 
     /* Check and report on potential stack corruption. */
-    if (stackBegin[0] != 0xAC1D || stackBegin[1] != 0xFACE)
+    if (vmMode == VM_MODE_STACK &&
+        (stackBegin[0] != 0xAC1D || stackBegin[1] != 0xFACE))
     {
         puts("[RackVM] Warning: stack was corrupted during execution (underflow).\n");
     }
+    else if (vmMode == VM_MODE_REGISTER &&
+        (stackBegin[32] != 0xAC1D || stackBegin[33] != 0xFACE))
+    {
+        puts("[RackVM] Warning: stack was corrupted during execution.\n");
+    }
+
+    if (exitCode != VM_EXIT_SUCCESS)
+        printf("[RackVM] Exited with exit code %d\n", exitCode);
 
 #if !defined(NDEBUG) && !defined(NO_STACK_DUMP)
     DumpStack();
