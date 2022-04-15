@@ -432,7 +432,7 @@ int StackInterpreterLoop()
                 break;
 
             case S_ITOS: snprintf(strBuf, 32, "%d", *(int32_t*)sp); 
-                *sp = HeapAllocString(strBuf);
+                *sp = VMHeapAllocString(strBuf);
                 instrPtr += 1;
                 break;
 
@@ -449,7 +449,7 @@ int StackInterpreterLoop()
                 break;
 
             case S_LTOS: snprintf(strBuf, 32, "%lld", *(int64_t*)(--sp)); 
-                *sp = HeapAllocString(strBuf);
+                *sp = VMHeapAllocString(strBuf);
                 instrPtr += 1;
                 break;
 
@@ -467,7 +467,7 @@ int StackInterpreterLoop()
 
             case S_FTOS: tmpInt = DECODE_8(u8, C, 0);
                 snprintf(strBuf, 32, "%.*f", (tmpInt == 0xFF ? 3 : tmpInt), *f32sp); 
-                *sp = HeapAllocString(strBuf);
+                *sp = VMHeapAllocString(strBuf);
                 instrPtr += 2;
                 break;
 
@@ -485,7 +485,7 @@ int StackInterpreterLoop()
 
             case S_DTOS: tmpInt = DECODE_8(u8, C, 0);
                 snprintf(strBuf, 32, "%.*f", (tmpInt == 0xFF ? 3 : tmpInt), *(double*)((int32_t*)--sp)); 
-                *sp = HeapAllocString(strBuf);
+                *sp = VMHeapAllocString(strBuf);
                 instrPtr += 2;
                 break;
 
@@ -513,35 +513,35 @@ int StackInterpreterLoop()
 
             /**** Miscellaneous ****/
 
-            case S_NEW: *sp = HeapAlloc(*sp);
+            case S_NEW: *sp = VMHeapAlloc(*sp);
                 instrPtr += 1;
                 break;
 
-            case S_DEL: HeapFree(*sp--);
+            case S_DEL: VMHeapFree(*sp--);
                 instrPtr += 1;
                 break;
 
-            case S_RESZ: *--sp = HeapRealloc(*sp, *(sp-1));
+            case S_RESZ: *--sp = VMHeapRealloc(*sp, *(sp-1));
                 instrPtr += 1;
                 break;
 
-            case S_SIZE: *sp = GetHeapAllocSize(*sp);
+            case S_SIZE: *sp = VMGetHeapAllocSize(*sp);
                 instrPtr += 1;
                 break;
 
-            case S_STR: *++sp = HeapAllocString((const char *)(program + DECODE_ADDR()));
+            case S_STR: *++sp = VMHeapAllocString((const char *)(program + DECODE_ADDR()));
                 instrPtr += 5;
                 break;
 
-            case S_STRCPY: *sp = HeapAllocSubStr((const char *)(heap + *sp), DECODE_32(u32, C, 0));
+            case S_STRCPY: *sp = VMHeapAllocSubStr((const char *)(heap + *sp), DECODE_32(u32, C, 0));
                 instrPtr += 5;
                 break;
 
-            case S_STRCAT: *sp = HeapAllocCombinedString(heap + *sp, program + DECODE_ADDR());
+            case S_STRCAT: *sp = VMHeapAllocCombinedString(heap + *sp, program + DECODE_ADDR());
                 instrPtr += 5;
                 break;
 
-            case S_STRCMB: *--sp = HeapAllocCombinedString(heap + *(sp-1), heap + *sp);
+            case S_STRCMB: *--sp = VMHeapAllocCombinedString(heap + *(sp-1), heap + *sp);
                 instrPtr += 1;
                 break;
 

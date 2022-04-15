@@ -1,4 +1,5 @@
 option(UNION_DECODING "Use a union instead of bitmasking for decoding instruction operands." ON)
+option(BENCHMARK "Whether to measure the time taken to execute the program (WIN)." OFF)
 
 add_executable(${TARGET_VM})
 
@@ -14,8 +15,15 @@ target_sources(${TARGET_VM}
         shared_impl.h
 )
 
+if (CMAKE_COMPILER_IS_GNUCC)
+    set(CMAKE_C_FLAGS_RELEASE "-DNDEBUG -O1")
+endif()
+
 if(UNION_DECODING)
     target_compile_definitions(${TARGET_VM} PRIVATE UNION_DECODING)
+endif()
+if(BENCHMARK)
+    target_compile_definitions(${TARGET_VM} PRIVATE BENCHMARK)
 endif()
 
 add_subdirectory(decoding-exp)

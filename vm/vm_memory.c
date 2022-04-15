@@ -75,7 +75,7 @@ void DeallocateHeap()
     free(heap);
 }
 
-Addr_t HeapAlloc(uint32_t size)
+Addr_t VMHeapAlloc(uint32_t size)
 {
     if (size == 0)
         return 0;
@@ -124,7 +124,7 @@ Addr_t HeapAlloc(uint32_t size)
     return (Addr_t)((uint8_t *)curr - heap) + sizeof(Alloc_t);
 }
 
-Addr_t HeapRealloc(Addr_t address, uint32_t size)
+Addr_t VMHeapRealloc(Addr_t address, uint32_t size)
 {
     if (size == 0)
         return 0;
@@ -172,18 +172,18 @@ Addr_t HeapRealloc(Addr_t address, uint32_t size)
         uint32_t oldDataSize = ((uint8_t*)(old->next) - (uint8_t*)old) - sizeof(Alloc_t);
         address += sizeof(Alloc_t);
 
-        newAddress = HeapAlloc(size);
+        newAddress = VMHeapAlloc(size);
 
         /* Copy the old data to the new data. No Alloc_t header, only data.*/
         memcpy(heap + newAddress, heap + address,  oldDataSize);
 
-        HeapFree(address);
+        VMHeapFree(address);
     }
 
     return newAddress;
 }
 
-void HeapFree(Addr_t address)
+void VMHeapFree(Addr_t address)
 {
     address -= sizeof(Alloc_t);
 
@@ -215,10 +215,10 @@ void HeapFree(Addr_t address)
     curr->occupied = false;
 }
 
-Addr_t HeapAllocString(const char *content)
+Addr_t VMHeapAllocString(const char *content)
 {
     size_t size = strlen(content)+1;
-    Addr_t str = HeapAlloc(size);
+    Addr_t str = VMHeapAlloc(size);
 
     strcpy(heap + str, content);
 
@@ -230,12 +230,12 @@ Addr_t HeapAllocString(const char *content)
     return str;
 }
 
-Addr_t HeapAllocCombinedString(const char *content1, const char *content2)
+Addr_t VMHeapAllocCombinedString(const char *content1, const char *content2)
 {
     size_t content1Size = strlen(content1);
     size_t content2Size = strlen(content2);
     size_t size = content1Size + content2Size + 1;
-    Addr_t str = HeapAlloc(size);
+    Addr_t str = VMHeapAlloc(size);
 
     memcpy(heap + str, content1, content1Size);
     memcpy(heap + str + content1Size, content2, content2Size);
@@ -249,13 +249,13 @@ Addr_t HeapAllocCombinedString(const char *content1, const char *content2)
     return str;
 }
 
-Addr_t HeapAllocSubStr(const char *content, uint32_t size)
+Addr_t VMHeapAllocSubStr(const char *content, uint32_t size)
 {
     size_t realSize = strlen(content);
     if (size > realSize)
         size = realSize;
 
-    Addr_t str = HeapAlloc(size);
+    Addr_t str = VMHeapAlloc(size);
 
     memcpy(heap + str, content, size);
     *(char*)(heap+str+size) = '\0';
@@ -268,7 +268,7 @@ Addr_t HeapAllocSubStr(const char *content, uint32_t size)
     return str;
 }
 
-uint32_t GetHeapAllocSize(Addr_t address)
+uint32_t VMGetHeapAllocSize(Addr_t address)
 {
     Alloc_t *curr = (Alloc_t*)(heap + address - sizeof(Alloc_t));
     return (uint32_t)GetAllocSize(curr);

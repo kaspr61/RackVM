@@ -601,7 +601,7 @@ int RegisterInterpreterLoop()
                 break;
 
             case R_ITOS: snprintf(strBuf, 32, "%d", reg[DECODE_8(u8_u8, b, 1)]); 
-                reg[DECODE_8(u8_u8, a, 0)] = HeapAllocString(strBuf);
+                reg[DECODE_8(u8_u8, a, 0)] = VMHeapAllocString(strBuf);
                 instrPtr += 3;
                 break;
 
@@ -618,7 +618,7 @@ int RegisterInterpreterLoop()
                 break;
 
             case R_LTOS: snprintf(strBuf, 32, "%lld", dreg(DECODE_8(u8_u8, b, 1))); 
-                dreg(DECODE_8(u8_u8, a, 0)) = HeapAllocString(strBuf);
+                dreg(DECODE_8(u8_u8, a, 0)) = VMHeapAllocString(strBuf);
                 instrPtr += 3;
                 break;
 
@@ -636,7 +636,7 @@ int RegisterInterpreterLoop()
 
             case R_FTOS: tmpInt = DECODE_8(u8_u8_u8, c, 2);
                 snprintf(strBuf, 32, "%.*f", (tmpInt == 0xFF ? 3 : tmpInt), *(float*)(reg + DECODE_8(u8_u8_u8, b, 1))); 
-                reg[DECODE_8(u8_u8_u8, a, 0)] = HeapAllocString(strBuf);
+                reg[DECODE_8(u8_u8_u8, a, 0)] = VMHeapAllocString(strBuf);
                 instrPtr += 4;
                 break;
 
@@ -654,7 +654,7 @@ int RegisterInterpreterLoop()
 
             case R_DTOS: tmpInt = DECODE_8(u8_u8_u8, c, 2);
                 snprintf(strBuf, 32, "%.*f", (tmpInt == 0xFF ? 3 : tmpInt), *(double*)(reg + DECODE_8(u8_u8_u8, b, 1))); 
-                reg[DECODE_8(u8_u8_u8, a, 0)] = HeapAllocString(strBuf);
+                reg[DECODE_8(u8_u8_u8, a, 0)] = VMHeapAllocString(strBuf);
                 instrPtr += 4;
                 break;
 
@@ -690,47 +690,47 @@ int RegisterInterpreterLoop()
 
             /**** Miscellaneous ****/
 
-            case R_NEW: reg[DECODE_8(u8_u8, a, 0)] = HeapAlloc(reg[DECODE_8(u8_u8, b, 1)]);
+            case R_NEW: reg[DECODE_8(u8_u8, a, 0)] = VMHeapAlloc(reg[DECODE_8(u8_u8, b, 1)]);
                 instrPtr += 3;
                 break;
 
-            case R_NEWI: reg[DECODE_8(u8_i32, a, 0)] = HeapAlloc(DECODE_32(u8_i32, C, 1));
+            case R_NEWI: reg[DECODE_8(u8_i32, a, 0)] = VMHeapAlloc(DECODE_32(u8_i32, C, 1));
                 instrPtr += 6;
                 break;
 
-            case R_DEL: HeapFree(reg[DECODE_8(u8, C, 0)]);
+            case R_DEL: VMHeapFree(reg[DECODE_8(u8, C, 0)]);
                 instrPtr += 2;
                 break;
 
-            case R_RESZ: reg[DECODE_8(u8_u8, a, 0)] = HeapRealloc(reg[DECODE_8(u8_u8, a, 0)], reg[DECODE_8(u8_u8, b, 1)]);
+            case R_RESZ: reg[DECODE_8(u8_u8, a, 0)] = VMHeapRealloc(reg[DECODE_8(u8_u8, a, 0)], reg[DECODE_8(u8_u8, b, 1)]);
                 instrPtr += 3;
                 break;
 
-            case R_RESZI: reg[DECODE_8(u8_i32, a, 0)] = HeapRealloc(reg[DECODE_8(u8_i32, a, 0)], DECODE_32(u8_i32, C, 1));
+            case R_RESZI: reg[DECODE_8(u8_i32, a, 0)] = VMHeapRealloc(reg[DECODE_8(u8_i32, a, 0)], DECODE_32(u8_i32, C, 1));
                 instrPtr += 6;
                 break;
 
-            case R_SIZE: reg[DECODE_8(u8_u8, a, 0)] = GetHeapAllocSize(reg[DECODE_8(u8_u8, b, 1)]);
+            case R_SIZE: reg[DECODE_8(u8_u8, a, 0)] = VMGetHeapAllocSize(reg[DECODE_8(u8_u8, b, 1)]);
                 instrPtr += 3;
                 break;
 
-            case R_STR: reg[DECODE_8(u8_u32, a, 0)] = HeapAllocString((const char *)(program + DECODE_u32(u8_u32, C, 1)));
+            case R_STR: reg[DECODE_8(u8_u32, a, 0)] = VMHeapAllocString((const char *)(program + DECODE_u32(u8_u32, C, 1)));
                 instrPtr += 6;
                 break;
 
-            case R_STRCPY: reg[DECODE_8(u8_u8_u32, a, 0)] = HeapAllocSubStr(
+            case R_STRCPY: reg[DECODE_8(u8_u8_u32, a, 0)] = VMHeapAllocSubStr(
                     (const char *)(heap + reg[DECODE_8(u8_u8_u32, b, 1)]), 
                     DECODE_u32(u8_u8_u32, C, 2));
                 instrPtr += 7;
                 break;
 
-            case R_STRCAT: reg[DECODE_8(u8_u8_u32, a, 0)] = HeapAllocCombinedString(
+            case R_STRCAT: reg[DECODE_8(u8_u8_u32, a, 0)] = VMHeapAllocCombinedString(
                     (const char *)(heap + reg[DECODE_8(u8_u8_u32, b, 1)]), 
                     (const char *)(program + DECODE_u32(u8_u8_u32, C, 2)));
                 instrPtr += 7;
                 break;
 
-            case R_STRCMB: reg[DECODE_8(u8_u8_u8, a, 0)] = HeapAllocCombinedString(
+            case R_STRCMB: reg[DECODE_8(u8_u8_u8, a, 0)] = VMHeapAllocCombinedString(
                     (const char *)(heap + reg[DECODE_8(u8_u8_u8, b, 1)]), 
                     (const char *)(heap + reg[DECODE_8(u8_u8_u8, c, 2)]));
                 instrPtr += 4;

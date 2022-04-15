@@ -78,7 +78,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     {\
         case SYSFUNC_PRINT: SysPrint(tmpInt);\
             break;\
-        case SYSFUNC_INPUT: *++sp = HeapAllocString(fgets(strBuf, 128, stdin));\
+        case SYSFUNC_INPUT: *++sp = VMHeapAllocString(fgets(strBuf, 128, stdin));\
             break;\
         case SYSFUNC_STR: SysStr(tmpInt);\
             break;\
@@ -269,7 +269,7 @@ void SysStr(int32_t argCnt)
             break;
     }
 
-    *++sp = HeapAllocString(strBuf);
+    *++sp = VMHeapAllocString(strBuf);
 }
 
 #undef PRINT_VAL_SIZE

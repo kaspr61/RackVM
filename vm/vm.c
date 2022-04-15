@@ -33,6 +33,18 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "vm_memory.h"
 
+#ifdef BENCHMARK
+    #ifndef NDEBUG
+        #error Attempting to benchmark in debug mode.
+    #endif
+    #if !defined(_WIN32) && !defined(WIN32)
+        #error Benchmarks is currently only supported on windows.
+    #endif
+    
+    #include <windows.h>
+#endif
+
+
 /* Disables the automatic dump of the stack to stdout on program exit. 
  * This only takes effect when compiling in debug mode. */
 /* #define NO_STACK_DUMP */
@@ -265,7 +277,7 @@ stackFrame -> offset to previous ptr. (refers to stack)
 static bool ReadProgram(const char *fileName)
 {
     FILE *file = fopen(fileName, "rb");
-    if (!file)
+    if (file == NULL)
         return false;
 
     uint32_t header[4] = {0};
@@ -378,7 +390,7 @@ static void Cleanup()
 
 int main(int argc, const char **argv)
 {
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(BENCHMARK)
     #if UNION_DECODING
         puts("[RackVM] Decoding instructions using the union technique.");
     #else
@@ -409,10 +421,71 @@ int main(int argc, const char **argv)
     AllocateStack();
 
     int exitCode;
+
+#ifdef BENCHMARK    
+    LARGE_INTEGER li;
+    if  (!QueryPerformanceFrequency(&li))
+    {
+        puts("[RackVM] QueryPerformanceFrequency failed!");
+        Cleanup();
+        return 0;
+    }
+
+    double PCFreq = li.QuadPart / 1000.0;
+
+    int totalRuns = 1;
+    printf("[RackVM] Enter the number of runs to perform: ");
+    scanf("%d", &totalRuns);
+    if (totalRuns < 0 || totalRuns > INT32_MAX)
+    {
+        puts("[RackVM] Invalid number of runs.");
+        return 0;
+    }
+
+    double avgRunTime = 0.0;
+    double *runData = malloc(totalRuns * sizeof(double));
+    if (!runData)
+    {
+        puts("[RackVM] Out of memory.");
+        return 0;
+    }
+
+    for (int i = 0; i < totalRuns; ++i)
+    {
+        QueryPerformanceCounter(&li);
+        int64_t PCStart = li.QuadPart;
+
+        if (vmMode == VM_MODE_STACK)
+            exitCode = StackInterpreterLoop();
+        else
+            exitCode = RegisterInterpreterLoop();
+
+        QueryPerformanceCounter(&li);
+        runData[i] = (li.QuadPart - PCStart) / PCFreq;
+        avgRunTime += runData[i];
+
+        /*
+            Only the first run actually runs. I probably have to reset
+            some globals in order to fix this.
+        */
+    }
+
+    avgRunTime /= totalRuns;
+
+    for (int i = 0; i < totalRuns; ++i)
+    {
+        printf("    [Run %03d] Elapsed time: %f ms.\n", i, runData[i]);
+    }
+
+    printf("\n    Average run time: %f ms.\n", avgRunTime);
+
+    free(runData);
+#else
     if (vmMode == VM_MODE_STACK)
         exitCode = StackInterpreterLoop();
     else
         exitCode = RegisterInterpreterLoop();
+#endif
 
     /* Check and report on potential stack corruption. */
     if (vmMode == VM_MODE_STACK &&

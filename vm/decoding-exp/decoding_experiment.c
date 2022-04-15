@@ -25,6 +25,13 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+/*
+ * This is the initial experiment performed on union vs bitmasking decoding.
+ * It uses mock VM instructions, that are hardcoded. The results are deemed
+ * highly unreliable because of this. This was parially done in order to test
+ * out whether union decoding was possible in practice.
+ */
+
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>

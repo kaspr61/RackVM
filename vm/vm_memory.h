@@ -37,12 +37,12 @@ extern uint8_t *heap; /* Pointer to the start of the heap. */
 bool     AllocateHeap(uint64_t size, uint64_t maxSize);
 void     DeallocateHeap();
 
-Addr_t   HeapAlloc(uint32_t size);
-Addr_t   HeapRealloc(Addr_t address, uint32_t size);
-void     HeapFree(Addr_t address);
-Addr_t   HeapAllocString(const char *content);
-Addr_t   HeapAllocSubStr(const char *content, uint32_t size);
-Addr_t   HeapAllocCombinedString(const char *content1, const char *content2);
-uint32_t GetHeapAllocSize(Addr_t address);
+Addr_t   VMHeapAlloc(uint32_t size);
+Addr_t   VMHeapRealloc(Addr_t address, uint32_t size);
+void     VMHeapFree(Addr_t address);
+Addr_t   VMHeapAllocString(const char *content);
+Addr_t   VMHeapAllocSubStr(const char *content, uint32_t size);
+Addr_t   VMHeapAllocCombinedString(const char *content1, const char *content2);
+uint32_t VMGetHeapAllocSize(Addr_t address);
 
 #endif /* INC_VM_MEMORY_H */
