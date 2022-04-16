@@ -75,6 +75,11 @@ void DeallocateHeap()
     free(heap);
 }
 
+void ResetHeap()
+{
+    memset(heap, 0, heapSize);
+}
+
 Addr_t VMHeapAlloc(uint32_t size)
 {
     if (size == 0)

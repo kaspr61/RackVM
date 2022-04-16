@@ -36,6 +36,7 @@ extern uint8_t *heap; /* Pointer to the start of the heap. */
 
 bool     AllocateHeap(uint64_t size, uint64_t maxSize);
 void     DeallocateHeap();
+void     ResetHeap();
 
 Addr_t   VMHeapAlloc(uint32_t size);
 Addr_t   VMHeapRealloc(Addr_t address, uint32_t size);

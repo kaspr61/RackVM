@@ -41,6 +41,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         #error Benchmarks is currently only supported on windows.
     #endif
     
+    #include <math.h>
+    #include <time.h>
     #include <windows.h>
 #endif
 
@@ -423,6 +425,12 @@ int main(int argc, const char **argv)
     int exitCode;
 
 #ifdef BENCHMARK    
+    time_t benchStartTime = time(NULL);
+
+    char vmModeStr[] = "Register";
+    if (vmMode == VM_MODE_STACK)
+        strcpy(vmModeStr, "Stack");
+
     LARGE_INTEGER li;
     if  (!QueryPerformanceFrequency(&li))
     {
@@ -436,7 +444,7 @@ int main(int argc, const char **argv)
     int totalRuns = 1;
     printf("[RackVM] Enter the number of runs to perform: ");
     scanf("%d", &totalRuns);
-    if (totalRuns < 0 || totalRuns > INT32_MAX)
+    if (totalRuns < 1 || totalRuns > 10000)
     {
         puts("[RackVM] Invalid number of runs.");
         return 0;
@@ -464,20 +472,79 @@ int main(int argc, const char **argv)
         runData[i] = (li.QuadPart - PCStart) / PCFreq;
         avgRunTime += runData[i];
 
-        /*
-            Only the first run actually runs. I probably have to reset
-            some globals in order to fix this.
-        */
+        /* Reset some things for the next run. */
+        instrPtr = program;
+        sysArgPtr = sysArgs;
+        sp = stackBegin;
+
+        if (vmMode == VM_MODE_REGISTER)
+            sp += 32;
+
+        *sp++ = 0xAC1D;
+        *sp = 0xFACE;
+
+        ResetHeap();
     }
 
     avgRunTime /= totalRuns;
 
+    double meanSum = 0.0;    
+
+    char timeString[18];
+    strftime(timeString, sizeof(timeString), "%Y%m%d_%H%M%S", localtime(&benchStartTime));
+
+    snprintf(strBuf, 32, "raw_%s.csv", timeString);
+    FILE *csvFile = fopen(strBuf, "w");
+
+    fputs("Run,Elapsed,Dev. from mean,\n", csvFile);
+
+    snprintf(strBuf, 32, "out_%s.txt", timeString);
+    FILE *outFile = fopen(strBuf, "w");
+
+    puts("=============================================");
+    printf(" Benchmark Results: %s", ctime(&benchStartTime));
+    printf(" Program: %s\n", argv[1]);
+    printf(" VM Mode: %s\n\n", vmModeStr);
+    printf("%6s%16s%16s\n", "Run", "Elapsed (ms)", "Dev. from mean");
+    puts("---------------------------------------------");
+    
+    fputs("=============================================\n", outFile);
+    fprintf(outFile, " Benchmark Results: %s", ctime(&benchStartTime));
+    fprintf(outFile, " Program: %s\n", argv[1]);
+    fprintf(outFile, " VM Mode: %s\n", vmModeStr);
+#ifdef UNION_DECODING
+    fputs(" Decoding: Union\n\n", outFile);
+#else
+    fputs(" Decoding: Bitmask\n\n", outFile);
+#endif
+    fprintf(outFile, "%6s%16s%16s\n", "Run", "Elapsed (ms)", "Dev. from mean");
+    fputs("---------------------------------------------\n", outFile);
+
     for (int i = 0; i < totalRuns; ++i)
     {
-        printf("    [Run %03d] Elapsed time: %f ms.\n", i, runData[i]);
+        double elapsed = runData[i];
+        double meanDev = elapsed - avgRunTime;
+        printf("%6d%16f%16f\n", i+1, elapsed, meanDev);
+        fprintf(outFile, "%6d%16f%16f\n", i+1, elapsed, meanDev);
+        fprintf(csvFile, "%d,%f,%f,\n", i+1, elapsed, meanDev);
+        meanDev *= meanDev;
+        meanSum += meanDev;
     }
 
-    printf("\n    Average run time: %f ms.\n", avgRunTime);
+    double stdDev = sqrt(meanSum / (totalRuns - 1));
+    
+    puts("---------------------------------------------");
+    printf("\n  Mean run time:      %f ms.\n", avgRunTime);
+    printf("  Standard deviation: %f.\n", stdDev);
+    puts("=============================================");
+
+    fputs("---------------------------------------------\n", outFile);
+    fprintf(outFile, "\n  Mean run time:      %f ms.\n", avgRunTime);
+    fprintf(outFile, "  Standard deviation: %f.\n", stdDev);
+    fputs("=============================================\n", outFile);
+
+    fclose(csvFile);
+    fclose(outFile);
 
     free(runData);
 #else

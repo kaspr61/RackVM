@@ -23,8 +23,9 @@
 ; OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 ; OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-; File: circles.asm
-; Description:
+; File: circles_s.asm
+; Description: Performs some simple calculations on 10,000 spheres, using
+;              some (deliberately) slow approximations of pi and sqrt.
 
 .MODE       Stack
 .HEAP       128
