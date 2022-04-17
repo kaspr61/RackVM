@@ -197,7 +197,7 @@ namespace Assembly
     DECL_REG_INSTR2(0x6D, CPGQ,     Register,   Register            )
     DECL_REG_INSTR2(0x6E, CPGQ_64,  Register,   Register            )
     DECL_REG_INSTR2(0x6F, CPGQ_F,   Register,   Register            )
-    DECL_REG_INSTR2(0x60, CPGQ_F64, Register,   Register            )
+    DECL_REG_INSTR2(0x70, CPGQ_F64, Register,   Register            )
     DECL_REG_INSTR2(0x71, CPLQ,     Register,   Register            )
     DECL_REG_INSTR2(0x72, CPLQ_64,  Register,   Register            )
     DECL_REG_INSTR2(0x73, CPLQ_F,   Register,   Register            )

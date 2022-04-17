@@ -23,11 +23,11 @@
 ; OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 ; OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-; File: circles_s.asm
+; File: circles_r.asm
 ; Description: Performs some simple calculations on 10,000 spheres, using
 ;              some (deliberately) slow approximations of pi and sqrt.
 
-.MODE       Stack
+.MODE       Register
 .HEAP       128
 .HEAP_MAX   128
 
@@ -35,6 +35,7 @@
 
 ; double sqrt(double n)
 ; Returns a sqrt approximation based on the following code:
+; Uses: R21-R30
 ;
 ; double start = 0, end = n, mid = 0;
 ; while((end - start) >= 0.000001) {
@@ -46,50 +47,39 @@
 ; }
 ; return mid;
 sqrt:
-  LDI.64    0.0         ; +4  start
-  LDI.64    0.0         ; +12 end
-  LDI.64    0.0         ; +20 mid
-  LDA.64    8
-  STL.64    12
+  LDI.64    R25,  0.0         ; start
+  LDA.64    R27,  8           ; end
+  LDI.64    R29,  0.0         ; mid
 sqrt_test:
-  LDL.64    12
-  LDL.64    4
-  SUB.F64  
-  LDI.64    0.000001
-  CPGQ.F64
+  SUB.F64   R21,  R27,  R25
+  LDI.64    R23,  0.000001
+  CPGQ.F64  R21,  R23
   BRZ       sqrt_ret
 
-  LDL.64    4
-  LDL.64    12
-  ADD.F64
-  LDI.64    2.0
-  DIV.F64
-  STL.64    20
+  ADD.F64   R29,  R25,  R27
+  DIVI.F64  R29,  R29,  2.0
 
-  LDL.64    20
-  LDL.64    20
-  MUL.F64
-  LDA.64    8
-  CPLT.F64
+  MUL.F64   R21,  R29,  R29
+  LDA.64    R23,  8
+  CPLT.F64  R21,  R23
   BRZ       sqrt_next_if
-  LDL.64    20
-  STL.64    4
+  MOV.64    R25,  R29
 sqrt_next_if:
-  LDL.64    20
-  LDL.64    20
-  MUL.F64
-  LDA.64    8
-  CPGQ.F64
+  MUL.F64   R21,  R29,  R29
+  LDA.64    R23,  8
+  CPGQ.F64  R21,  R23
   BRZ       sqrt_test
-  LDL.64    20
-  STL.64    12
+  MOV.64    R27,  R29
   JMP       sqrt_test
 sqrt_ret:
-  LDL.64    20
+  MOVS.64   R29
   RET.64    8
 
 ; double pi(int precision)
 ; Returns a rough pi approximation based on the following code:
+; In: precision R24
+; Out: R25-R26
+; Uses: R22-R30
 ;
 ; double result = 0;
 ; int sign = 1;
@@ -109,76 +99,56 @@ sqrt_ret:
 ; }
 ; return result * 4;
 pi:
-  LDI.64    0           ; +4 double result
-  LDI       1           ; +12 int sign
-  LDI       1           ; +16 int i
+  LDI       R22,  1     ; int i
+  LDI       R23,  1     ; int sign
+  LDI.64    R25,  0     ; double result
 pi_test:
-  LDL       16
-  LDA       4
-  CPLT
+  CPLT      R22,  R24
   BRZ       pi_ret
 
-  LDL       12
-  BRZ       pi_else
-  LDL.64    4
-  LDI.64    1.0
-  LDL       16
-  ITOD
-  DIV.F64
-  ADD.F64
-  STL.64    4
-  LDI       0
-  STL       12
+  CPZ       R23
+  BRNZ      pi_else
+  LDI.64    R27,  1.0
+  ITOD      R29,  R22
+  DIV.F64   R27,  R27,  R29
+  ADD.F64   R25,  R25,  R27
+  LDI       R23,  0
   JMP       pi_loop_inc
 pi_else:
-  LDL.64    4
-  LDI.64    1.0
-  LDL       16
-  ITOD
-  DIV.F64
-  SUB.F64
-  STL.64    4
-  LDI       1
-  STL       12
+  LDI.64    R27,  1.0
+  ITOD      R29,  R22
+  DIV.F64   R27,  R27,  R29
+  SUB.F64   R25,  R25,  R27
+  LDI       R23,  1
 pi_loop_inc:
-  LDL       16
-  LDI       2
-  ADD
-  STL       16
+  ADDI      R22,  R22,  2
   JMP       pi_test
 pi_ret:
-  LDL.64    4
-  LDI.64    4.0
-  MUL.F64
-  RET.64    4
+  MULI.F64  R25,  R25,  4.0
+  RET       0
 
 ; void dmemset(int dstAddress, int count, double val)
 ; Fills out a block of count number of doubles with val.
+; Uses: R16-R21
 ;
 ; for (int i = 0, int i < count; ++i) {
 ;     mem[dstAddress + i * 8] = val;
 ; }
 dmemset:
-  LDI       0           ; +4 i
+  LDA       R16,  4   ; dstAddress
+  LDA       R17,  8   ; count
+  LDA.64    R18,  16  ; val
+  LDI       R20,  0   ; i
 
 dmemset_test:
-  LDL       4
-  LDA       8
-  CPLT
+  CPLT      R20,  R17
   BRZ       dmemset_ret
 
-  LDA.64    16
-  LDA       4
-  LDL       4
-  LDI       8
-  MUL
-  ADD
-  STM.64
+  MULI      R21,  R20,  8
+  ADD       R21,  R21,  R16
+  STM.64    R21,  R18
 
-  LDL       4
-  LDI       1
-  ADD
-  STL       4
+  ADDI      R20,  R20,  1
   JMP       dmemset_test
 dmemset_ret:
   RET       16
@@ -186,100 +156,90 @@ dmemset_ret:
 ; double calc_volume(double radius)
 ; Does a bunch of unnecessary conversions to finally end up with
 ; volume of a sphere with the given radius.
+; Uses: R20-R26
 calc_volume:
+  LDA.64    R20,  8
   ; Radius to surface area: A = 4πr^2
-  LDI.64    4.0
-  LDI       2000 ; pi precision
+  LDI       R24,  2000  ; pi precision
   CALL      pi
-  MUL.F64
-  LDA.64    8
-  MUL.F64
-  LDA.64    8
-  MUL.F64
-  STA.64    8 ; arg is now surface area
+  MULI.F64  R25,  R25,  4.0
+  MUL.F64   R25,  R25,  R20
+  MUL.F64   R20,  R25,  R20
+  STL.64    8,    R20
 
   ; Surface area to radius: r = sqrt(A/(4π))
-  LDA.64    8
-  LDI.64    4.0
-  LDI       2000 ; pi precision
+  LDI       R24,  2000  ; pi precision
   CALL      pi
-  MUL.F64
-  DIV.F64
+  MULI.F64  R25,  R25,  4.0
+  DIV.F64   R20,  R20,  R25
+  MOVS.64   R20
   CALL      sqrt
-  STA.64    8
+  POP.64    R20
 
   ; Radius to volume: V = (4/3)*πr^3
-  LDI.64    4.0
-  LDI.64    3.0
-  DIV.F64
-  LDI       2000 ; pi precision
+  LDI       R24,  2000  ; pi precision
   CALL      pi
-  MUL.F64
-  LDA.64    8
-  LDA.64    8
-  MUL.F64
-  LDA.64    8
-  MUL.F64
-  MUL.F64
+  MUL.F64   R23,  R25,  R20
+  MUL.F64   R23,  R23,  R20
+  MUL.F64   R23,  R23,  R20
+  LDI.64    R20,  4.0
+  DIVI.F64  R20,  R20,  3.0
+  MUL.F64   R20,  R20,  R23
+  MOVS.64   R20
   RET.64    8
 
 ; double calc_avg_volume(int spheresBegin, int sphereCount)
+; Uses: R16-R22
 calc_avg_volume:
-  LDI       0         ; +4 i
-  LDI.64    0         ; +8 sum
+  LDI       R16,  0   ; i
+  LDI.64    R17,  0   ; sum
+  LDA       R19,  4   ; spheresBegin
 
 calc_avg_volume_test:
-  LDL       4
-  LDA       8
-  CPLT
+  LDA       R20,  8   ; sphereCount
+  CPLT      R16,  R20
   BRZ       calc_avg_volume_ret
 
-  LDA       4
-  LDL       4
-  LDI       8
-  MUL
-  ADD
-  LDM.64
+  MULI      R21,  R16,  8
+  ADD       R21,  R21,  R19
+  LDM.64    R21,  R21
+  MOVS.64   R21
   CALL      calc_volume
-  LDL.64    8
-  ADD.F64
-  STL.64    8
+  POP.64    R21
+  ADD.F64   R17,  R17,  R21
 
-  LDL       4
-  LDI       1
-  ADD
-  STL       4
+  ADDI      R16,  R16,  1
   JMP       calc_avg_volume_test
 calc_avg_volume_ret:
-  LDL.64    8
-  LDA       8
-  ITOD
-  DIV.F64
+  LDA       R20,  8
+  ITOD      R20,  R20
+  DIV.F64   R17,  R17,  R20
+  MOVS.64   R17
   RET.64    8
 
 ; Entry point
 main:
-  LDI       0         ; +4  spheresBegin
-  LDI       0         ; +8  spheresCount
+  LDI       R0,   0     ; spheresBegin
+  LDI       R1,   0     ; spheresCount
+
+  LDI.64    R21,  25.0
+  LDI.64    R23,  0.000001
+  CPGQ.F64  R21,  R23
 
   ; Allocate 10,000 spheres, i.e. 10,000 radii (double).
-  LDI       10 000
-  STL       8
-  LDL       8
-  LDI       8
-  MUL
-  NEW
-  STL       4
+  LDI       R1,   10 000
+  MULI      R2,   R1,   8
+  NEW       R0,   R2
 
   ; Fill up the memory with 5.0.
-  LDI.64    5.0
-  LDL       8
-  LDL       4
+  PUSH.64   5.0
+  MOVS      R1
+  MOVS      R0
   CALL      dmemset
 
   ; Now calculate the average volume of the spheres.
-  LDL       8
-  LDL       4
+  MOVS      R1
+  MOVS      R0
   CALL      calc_avg_volume
 
   EXIT

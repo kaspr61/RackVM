@@ -183,11 +183,11 @@ int RegisterInterpreterLoop()
                 instrPtr += 2;
                 break;
 
-            case R_PUSH: *++sp = reg[DECODE_32(i32, C, 0)];
+            case R_PUSH: *++sp = DECODE_32(i32, C, 0);
                 instrPtr += 5;
                 break;
 
-            case R_PUSH_64: *(int64_t*)++sp = dreg(DECODE_64(i64, C, 0));
+            case R_PUSH_64: *(int64_t*)++sp = DECODE_64(i64, C, 0);
                 ++sp;
                 instrPtr += 9;
                 break;
@@ -209,6 +209,29 @@ int RegisterInterpreterLoop()
     *(type)(reg+DECODE_8(layout, b, 1)) MACRO_LITERAL(op) \
     DECODE_64(layout, C, 2)
 
+#ifdef UNION_DECODING
+    #define REG_OPI_f32(type, layout, op) \
+        *(type)(reg+DECODE_8(layout, a, 0)) = \
+        *(type)(reg+DECODE_8(layout, b, 1)) MACRO_LITERAL(op) \
+        DECODE_32(layout, C, 2)
+
+    #define REG_OPI_f64(type, layout, op) \
+        *(type)(reg+DECODE_8(layout, a, 0)) = \
+        *(type)(reg+DECODE_8(layout, b, 1)) MACRO_LITERAL(op) \
+        DECODE_64(layout, C, 2)
+#else
+    #define REG_OPI_f32(type, layout, op) \
+        reinterpret.intVal = DECODE_32(layout, C, 2);\
+        *(type)(reg+DECODE_8(layout, a, 0)) = \
+        *(type)(reg+DECODE_8(layout, b, 1)) MACRO_LITERAL(op) \
+        reinterpret.fltVal
+
+    #define REG_OPI_f64(type, layout, op) \
+        reinterpret.longVal = DECODE_64(layout, C, 2);\
+        *(type)(reg+DECODE_8(layout, a, 0)) = \
+        *(type)(reg+DECODE_8(layout, b, 1)) MACRO_LITERAL(op) \
+        reinterpret.dblVal
+#endif
             case R_ADD: REG_OP(int32_t *, +);
                 instrPtr += 4;
                 break;
@@ -226,19 +249,19 @@ int RegisterInterpreterLoop()
                 break;
 
             case R_ADDI: REG_OPI_32(int32_t *, u8_u8_i32, +);
-                instrPtr += 4;
+                instrPtr += 7;
                 break;
 
             case R_ADDI_64: REG_OPI_64(int64_t *, u8_u8_i64, +);
-                instrPtr += 4;
+                instrPtr += 11;
                 break;
 
-            case R_ADDI_F: REG_OPI_32(float *, u8_u8_f32, +);
-                instrPtr += 4;
+            case R_ADDI_F: REG_OPI_f32(float *, u8_u8_f32, +);
+                instrPtr += 7;
                 break;
 
-            case R_ADDI_F64: REG_OPI_64(double *, u8_u8_f64, +);
-                instrPtr += 4;
+            case R_ADDI_F64: REG_OPI_f64(double *, u8_u8_f64, +);
+                instrPtr += 11;
                 break;
 
             case R_SUB: REG_OP(int32_t *, -);
@@ -258,19 +281,19 @@ int RegisterInterpreterLoop()
                 break;
 
             case R_SUBI: REG_OPI_32(int32_t *, u8_u8_i32, -);
-                instrPtr += 4;
+                instrPtr += 7;
                 break;
 
             case R_SUBI_64: REG_OPI_64(int64_t *, u8_u8_i64, -);
-                instrPtr += 4;
+                instrPtr += 11;
                 break;
 
-            case R_SUBI_F: REG_OPI_32(float *, u8_u8_f32, -);
-                instrPtr += 4;
+            case R_SUBI_F: REG_OPI_f32(float *, u8_u8_f32, -);
+                instrPtr += 7;
                 break;
 
-            case R_SUBI_F64: REG_OPI_64(double *, u8_u8_f64, -);
-                instrPtr += 4;
+            case R_SUBI_F64: REG_OPI_f64(double *, u8_u8_f64, -);
+                instrPtr += 11;
                 break;
 
             case R_MUL: REG_OP(int32_t *, *);
@@ -290,19 +313,19 @@ int RegisterInterpreterLoop()
                 break;
 
             case R_MULI: REG_OPI_32(int32_t *, u8_u8_i32, *);
-                instrPtr += 4;
+                instrPtr += 7;
                 break;
 
             case R_MULI_64: REG_OPI_64(int64_t *, u8_u8_i64, *);
-                instrPtr += 4;
+                instrPtr += 11;
                 break;
 
-            case R_MULI_F: REG_OPI_32(float *, u8_u8_f32, *);
-                instrPtr += 4;
+            case R_MULI_F: REG_OPI_f32(float *, u8_u8_f32, *);
+                instrPtr += 7;
                 break;
 
-            case R_MULI_F64: REG_OPI_64(double *, u8_u8_f64, *);
-                instrPtr += 4;
+            case R_MULI_F64: REG_OPI_f64(double *, u8_u8_f64, *);
+                instrPtr += 11;
                 break;
 
             case R_DIV: REG_OP(int32_t *, /);
@@ -322,19 +345,19 @@ int RegisterInterpreterLoop()
                 break;
 
             case R_DIVI: REG_OPI_32(int32_t *, u8_u8_i32, /);
-                instrPtr += 4;
+                instrPtr += 7;
                 break;
 
             case R_DIVI_64: REG_OPI_64(int64_t *, u8_u8_i64, /);
-                instrPtr += 4;
+                instrPtr += 11;
                 break;
 
-            case R_DIVI_F: REG_OPI_32(float *, u8_u8_f32, /);
-                instrPtr += 4;
+            case R_DIVI_F: REG_OPI_f32(float *, u8_u8_f32, /);
+                instrPtr += 7;
                 break;
 
-            case R_DIVI_F64: REG_OPI_64(double *, u8_u8_f64, /);
-                instrPtr += 4;
+            case R_DIVI_F64: REG_OPI_f64(double *, u8_u8_f64, /);
+                instrPtr += 11;
                 break;
 
             /**** Bit Stuff ****/
@@ -427,7 +450,7 @@ int RegisterInterpreterLoop()
 #define REG_CPR_OPI(type, op) \
     *cpr = \
     *(type)(reg+DECODE_8(u8_i32, a, 0)) MACRO_LITERAL(op) \
-    *(type)(reg+DECODE_32(u8_i32, C, 1))
+    DECODE_32(u8_i32, C, 1)
 
             case R_OR: REG_CPR_OP(int32_t *, ||);
                 instrPtr += 3;

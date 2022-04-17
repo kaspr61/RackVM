@@ -217,7 +217,7 @@ typedef union {
     #define DECODE_64(layout, field, offset) instr.layout.field
     #define DECODE_OPCODE() instr.opcode
 #else
-    #define DECODE(layout, type, field, offset, mask) ((*(type *)(instr.raw + 1 + offset) & mask) >> (offset * 8))
+    #define DECODE(layout, type, field, offset, mask) (*(type *)((instr.raw + 1 + offset)) & mask)
     #define DECODE_ADDR() ((uint32_t)(DECODE(layout, uint32_t, field, 0, 0xFFFFFFFF)))
     #define DECODE_8( layout, field, offset) ((uint8_t)(DECODE(layout, uint8_t, field, offset, 0xFF)))
     #define DECODE_32(layout, field, offset) ((int32_t)(DECODE(layout, int32_t, field, offset, 0xFFFFFFFF)))
