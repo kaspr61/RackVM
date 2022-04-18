@@ -16,7 +16,7 @@ target_sources(${TARGET_VM}
 )
 
 if (CMAKE_COMPILER_IS_GNUCC)
-    set(CMAKE_C_FLAGS_RELEASE "-DNDEBUG -O1")
+    set(CMAKE_C_FLAGS_RELEASE "-DNDEBUG -O3")
 endif()
 
 if(UNION_DECODING)

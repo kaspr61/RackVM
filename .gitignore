@@ -1,6 +1,8 @@
 #### Misc ####
 *.bin
 */[Mm]akefile
+*/.venv/
+experiment/out/
 
 #### C/C++ ####
 
