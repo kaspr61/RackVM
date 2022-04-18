@@ -111,7 +111,7 @@ def gen_speedup(filePath, O0_reg, O0_stack, O1_reg, O1_stack, O3_reg, O3_stack):
     ax.set_ylabel('Speedup')
     ax.set_ylim(bottom=-0.04, top=0.04)
     ax.set_xticks(x, arch_cat)
-    ax.yaxis.set_major_locator(plt.MultipleLocator(0.005))
+    ax.yaxis.set_major_locator(plt.MultipleLocator(0.01))
     ax.yaxis.set_minor_locator(plt.MultipleLocator(0.005))
     ax.grid()
     ax.legend()
