@@ -105,11 +105,11 @@ def gen_speedup(filePath, O0_reg, O0_stack, O1_reg, O1_stack, O3_reg, O3_stack):
     stack_speedup = [O0_stack.relativeBitmask, O1_stack.relativeBitmask, O3_stack.relativeBitmask]
 
     x = np.arange(len(arch_cat))
-    fig, ax = plt.subplots(figsize=(7,5))
+    fig, ax = plt.subplots(figsize=(9,5))
     ax.bar(x - 0.1, reg_speedup, 0.2, label='Register', color=(0.50, 0.50, 0.50))
     ax.bar(x + 0.1, stack_speedup, 0.2, label='Stack', color=(0.30, 0.30, 0.30))
     ax.set_ylabel('Speedup')
-    ax.set_ylim(bottom=-0.04, top=0.04)
+    ax.set_ylim(bottom=-0.03, top=0.03)
     ax.set_xticks(x, arch_cat)
     ax.yaxis.set_major_locator(plt.MultipleLocator(0.01))
     ax.yaxis.set_minor_locator(plt.MultipleLocator(0.005))
