@@ -8,10 +8,10 @@ The purpose behind this project is to produce research artifacts, and other tool
 The repository contains:
 
 <ul>
-    <li> [RackVM](vm/) - written in C.
-    <li> [Assembler](assembler/) - written in C++, translates custom assembly to a binary, executed by RackVM.
-    <li> [Experiment](experiment/) - some data that has been produced from the VM in benchmark mode, as well as a Python script to analyze and generate figures from said data.
-    <li> [Compiler](compiler/) - developed using C++ with Bison and Flex. Note: is unfinished, produces only partial stack-based assembly, and is non-optimizing due to time constraints.
+    <li> RackVM - written in C.
+    <li> Assembler - written in C++, translates custom assembly to a binary, executed by RackVM.
+    <li> Experiment - some data that has been produced from the VM in benchmark mode, as well as a Python script to analyze and generate figures from said data.
+    <li> Compiler - developed using C++ with Bison and Flex. Note: is unfinished, produces only partial stack-based assembly, and is non-optimizing due to time constraints.
 </ul>
 
 
